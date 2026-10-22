@@ -16,8 +16,8 @@ The product name is configurable: the build-time default (`DEFAULT_PRODUCT_NAME`
 ## 1. Install (unpacked, development)
 
 ```bash
-pnpm install
-pnpm --filter @codeguard/chrome-extension build
+npm install
+npm run build
 ```
 
 1. Open `chrome://extensions`.
@@ -29,10 +29,10 @@ Other commands:
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm --filter @codeguard/chrome-extension dev` | Rebuild pages + background on change (`vite build --watch --mode development`). The content script is built by the full `build`; re-run it after content-script changes. Click the reload icon on `chrome://extensions` after rebuilding. |
-| `pnpm --filter @codeguard/chrome-extension typecheck` | `tsc --noEmit` |
-| `pnpm --filter @codeguard/chrome-extension test` | Vitest unit + component tests |
-| `pnpm --filter @codeguard/chrome-extension package` | Zips `dist/` into `apps/chrome-extension/release/codeguard-extension.zip` (uses the `zip` CLI; prints manual instructions if it is missing) |
+| `npm run dev` | Rebuild pages + background on change (`vite build --watch --mode development`). The content script is built by the full `build`; re-run it after content-script changes. Click the reload icon on `chrome://extensions` after rebuilding. |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Vitest unit + component tests |
+| `npm run package` | Zips `dist/` into `apps/chrome-extension/release/codeguard-extension.zip` (uses the `zip` CLI; prints manual instructions if it is missing) |
 | `node apps/chrome-extension/scripts/generate-icons.mjs` | Regenerates `public/icons/icon{16,32,48,128}.png` (pure Node + zlib) |
 
 Minimum Chrome version: **116** (side panel `open()` API).
@@ -219,7 +219,7 @@ Dashboard routes linked: `/register`, `/scans/:id`, `/scans/:id?finding=:finding
 
 ## 10. Testing
 
-`pnpm --filter @codeguard/chrome-extension test` (Vitest, jsdom):
+`npm test` (Vitest, jsdom):
 
 | File | Covers |
 | --- | --- |

@@ -12,7 +12,7 @@ const zipPath = join(releaseDir, 'codeguard-extension.zip');
 
 for (const f of ['manifest.json', 'background.js', 'content.js', 'popup.html', 'sidepanel.html']) {
   if (!existsSync(join(dist, f))) {
-    console.error(`dist/${f} is missing. Run "pnpm build" first.`);
+    console.error(`dist/${f} is missing. Run "npm run build" first.`);
     process.exit(1);
   }
 }

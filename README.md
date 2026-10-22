@@ -4,10 +4,9 @@ Manifest V3 extension with a popup, side panel, repository/link detection, scan 
 and local source uploads (files, folders, ZIP/TAR/TGZ archives).
 
 ```bash
-corepack enable
-pnpm install --frozen-lockfile
-pnpm build
-pnpm test
+npm ci
+npm run build
+npm test
 ```
 
 Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `dist`.
@@ -20,12 +19,12 @@ permission to upload, and click **Upload and scan**. A dedicated extension tab d
 findings and the full-report link. Keep it open while uploading. Folder paths are preserved. The
 background worker sends authenticated multipart requests; tokens never go to content scripts.
 
-Other commands: `pnpm typecheck`, `pnpm dev` (watch page/background builds), `pnpm package` (release ZIP).
+Other commands: `npm run typecheck`, `npm run dev` (watch page/background builds), `npm run package` (release ZIP).
 Rebuild for content-script changes and reload the extension in Chrome.
 
 ## Repository structure
 
-This is an independent repository: no pnpm workspace, private npm package, sibling checkout, or
+This is an independent repository: no workspace, private npm package, sibling checkout, or
 `@codeguard/*` dependency is required. API models and validation live in `src/contracts` as ordinary
 local source files. Each frontend owns its UI components in `src/components/primitives`.
 
@@ -52,7 +51,7 @@ shared mounted directory. Do not run an API production worker against an unrelat
 
 ## Configuration
 
-Use Node.js 22 (`nvm use`) and pnpm 9.15.0. Commit only `.env.example`; keep credentials in local `.env`
+Use Node.js 22 (`nvm use`) and npm 10 or newer. Commit only `.env.example`; keep credentials in local `.env`
 or your deployment's secret configuration. AI, SMTP and provider OAuth are optional. Subscription
 entitlements are implemented; online payment processing is not connected.
 
