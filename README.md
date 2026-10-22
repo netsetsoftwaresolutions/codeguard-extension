@@ -60,3 +60,7 @@ entitlements are implemented; online payment processing is not connected.
 `infrastructure/github-actions/ci.yml` is an inactive GitHub Actions template. The upload credential
 does not have GitHub's `workflow` permission, so it cannot publish active workflows. To enable CI,
 use an appropriately authorized credential and move this file to `.github/workflows/ci.yml`.
+
+## Server deployment
+
+See the [server deployment guide](https://github.com/netsetsoftwaresolutions/codeguard-api/blob/main/deployment/README.md) for Ubuntu, Docker Compose, HTTPS, MongoDB Atlas, environment configuration, updates, backups, and extension distribution.
