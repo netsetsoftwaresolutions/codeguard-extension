@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.next/
+coverage/
+release/
+data/
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+.DS_Store
+tests/fixtures/*.zip
