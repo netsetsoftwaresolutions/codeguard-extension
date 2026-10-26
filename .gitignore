@@ -1,12 +1,30 @@
+# Generated .gitignore file for: React
+# Created with FOSSA's DevOps Tools
+
+# React
 node_modules/
+build/
 dist/
-.next/
-coverage/
-release/
-data/
-!.env.example
-*.log
-*.tsbuildinfo
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Common
 .DS_Store
-tests/fixtures/*.zip
-config.bat
+Thumbs.db
+*.log
+*.bak
+*.tmp
+*.swp
+*~
+
+# IDE and editor generated files
+.idea/
+*.sublime-*
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+.vscode

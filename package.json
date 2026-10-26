@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node api.js && vite build --watch --mode development",
-    "build": "node api.js && tsc --noEmit && vite build && vite build --config vite.content.config.ts",
+    "dev": "vite build --watch --mode development",
+    "build": "tsc --noEmit && vite build && vite build --config vite.content.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "package": "node scripts/package.mjs"
