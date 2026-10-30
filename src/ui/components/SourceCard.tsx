@@ -48,17 +48,17 @@ export function SourceCard({
   const autoEnabled = state.settings.autoScanAllowlist.includes(key);
 
   return (
-    <div className="cg-card space-y-2">
-      <div className="flex items-start gap-2.5">
-        <div className="mt-0.5 text-slate-700 dark:text-slate-200">
+    <div className="cg-card space-y-3">
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-ink-700 dark:text-slate-200">
           <ProviderIcon provider={parsed.provider} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400">{label}</div>
           <div className="truncate text-sm font-semibold" title={name}>
             {name}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+            <span className="font-medium text-brand-600 dark:text-brand-400">{label}</span>
             <span>{providerName(parsed.provider)}</span>
             {parsed.pullNumber !== undefined && <span>#{parsed.pullNumber}</span>}
             {branch && (
@@ -73,6 +73,15 @@ export function SourceCard({
                 {resolved.path}
               </span>
             )}
+            {inspection && (
+              <span className="inline-flex items-center gap-1 capitalize">
+                {inspection.visibility === 'public' ? <Globe size={12} aria-hidden="true" /> : <Lock size={12} aria-hidden="true" />}
+                {inspection.visibility}
+              </span>
+            )}
+            {inspection && isGitProvider(parsed) && inspection.branches && <span>{inspection.branches.length} branches</span>}
+            {inspection && isGitProvider(parsed) && inspection.defaultBranch && inspection.defaultBranch !== branch && <span>default: {inspection.defaultBranch}</span>}
+            {inspection && !isGitProvider(parsed) && <span>{inspection.accessible ? 'Accessible' : 'Not accessible'}</span>}
           </div>
         </div>
         <button type="button" className="cg-btn-ghost px-1.5" onClick={() => void ws.reinspect()} aria-label="Refresh source information" title="Refresh">
@@ -86,38 +95,6 @@ export function SourceCard({
         </div>
       )}
       {inspectError && <Notice tone="error">{inspectError}</Notice>}
-
-      {inspection && (
-        <dl className="grid grid-cols-3 gap-2 rounded-lg bg-slate-50 p-2 text-xs dark:bg-ink-900/60">
-          <div>
-            <dt className="text-slate-500 dark:text-slate-400">Visibility</dt>
-            <dd className="mt-0.5 inline-flex items-center gap-1 font-medium capitalize">
-              {inspection.visibility === 'public' ? <Globe size={12} aria-hidden="true" /> : <Lock size={12} aria-hidden="true" />}
-              {inspection.visibility}
-            </dd>
-          </div>
-          {isGitProvider(parsed) && (
-            <>
-              <div>
-                <dt className="text-slate-500 dark:text-slate-400">Default branch</dt>
-                <dd className="mt-0.5 truncate font-medium" title={inspection.defaultBranch ?? undefined}>
-                  {inspection.defaultBranch ?? '—'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-500 dark:text-slate-400">Branches</dt>
-                <dd className="mt-0.5 font-medium tabular-nums">{inspection.branches ? inspection.branches.length : '—'}</dd>
-              </div>
-            </>
-          )}
-          {!isGitProvider(parsed) && (
-            <div className="col-span-2">
-              <dt className="text-slate-500 dark:text-slate-400">Access</dt>
-              <dd className="mt-0.5 font-medium">{inspection.accessible ? 'Accessible' : 'Not accessible'}</dd>
-            </div>
-          )}
-        </dl>
-      )}
 
       {inspection?.messages.map((m) => (
         <Notice key={m} tone="info">

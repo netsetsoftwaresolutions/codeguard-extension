@@ -16,7 +16,8 @@ export default defineConfig(({ mode }) => ({
   publicDir: 'public',
   build: {
     outDir: 'dist',
-    emptyOutDir: true,
+    // Dev builds keep dist/content.js, which the separate content-script build writes there.
+    emptyOutDir: mode !== 'development',
     target: 'chrome116',
     sourcemap: mode === 'development',
     minify: mode !== 'development',

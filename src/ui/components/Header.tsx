@@ -20,7 +20,7 @@ export function Header({
   const { auth, settings, productName } = state;
   const dark = settings.theme === 'dark';
   return (
-    <header className="flex items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-ink-600">
+    <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-200 bg-white/90 px-3 py-2 backdrop-blur dark:border-ink-600 dark:bg-ink-900/90">
       {onBack ? (
         <button type="button" className="cg-btn-ghost -ml-1 px-1.5" onClick={onBack} aria-label="Back">
           <ArrowLeft size={16} />
@@ -30,13 +30,6 @@ export function Header({
       )}
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold tracking-tight">{onBack ? 'Settings' : productName}</div>
-        {auth.signedIn && auth.user && !onBack && (
-          <div className="flex min-w-0 items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-            <span className="truncate" title={auth.user.email}>
-              {auth.user.email}
-            </span>
-          </div>
-        )}
       </div>
       {auth.signedIn && onSelectOrg && auth.organizations.length > 0 && !onBack && (
         <label className="sr-only" htmlFor="org-select">
@@ -46,7 +39,7 @@ export function Header({
       {auth.signedIn && onSelectOrg && auth.organizations.length > 0 && !onBack && (
         <select
           id="org-select"
-          className="max-w-[120px] truncate rounded-md border border-slate-300 bg-white px-1.5 py-1 text-xs dark:border-ink-500 dark:bg-ink-800"
+          className="max-w-[130px] truncate rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-medium dark:border-ink-500 dark:bg-ink-800"
           value={settings.organizationId ?? ''}
           onChange={(e) => onSelectOrg(e.target.value)}
           title="Organization"
@@ -67,7 +60,7 @@ export function Header({
         </button>
       )}
       {auth.signedIn && onLogout && !onBack && (
-        <button type="button" className="cg-btn-ghost px-1.5" onClick={onLogout} aria-label="Sign out" title="Sign out">
+        <button type="button" className="cg-btn-ghost px-1.5" onClick={onLogout} aria-label="Sign out" title={auth.user ? `Sign out (${auth.user.email})` : 'Sign out'}>
           <LogOut size={16} />
         </button>
       )}
