@@ -37,9 +37,14 @@ const RISK_STYLES: Record<RiskLevel, { label: string; cls: string }> = {
 export function RiskBadge({ level, score, className }: { level: RiskLevel; score?: number; className?: string }) {
   const r = RISK_STYLES[level];
   return (
-    <span className={cx('inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold', r.cls, className)} title="Risk score is an additive, explainable measure — not a probability that the code is safe.">
+    <span className={cx('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold', r.cls, className)} title="Risk score is an additive, explainable measure — not a probability that the code is safe.">
       {r.label}
-      {score !== undefined && <span className="rounded-full bg-black/20 px-1.5 tabular-nums">{score}/100</span>}
+      {score !== undefined && (
+        <>
+          <span className="opacity-60" aria-hidden="true">·</span>
+          <span className="tabular-nums">{score}/100</span>
+        </>
+      )}
     </span>
   );
 }
@@ -125,12 +130,16 @@ export function SeverityBar({ counts, className }: { counts: SeverityCounts; cla
 
 export function SeverityCountsRow({ counts, compact }: { counts: SeverityCounts; compact?: boolean }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className={cx('flex gap-x-3 gap-y-1', compact ? 'flex-nowrap' : 'flex-wrap')}>
       {SEVERITIES.map((s) => (
-        <span key={s} className={cx('inline-flex items-center gap-1 text-xs font-medium tabular-nums', SEVERITY_STYLES[s].text)}>
-          <span className={cx('h-2 w-2 rounded-full', SEVERITY_STYLES[s].dot)} aria-hidden="true" />
+        <span
+          key={s}
+          className={cx('inline-flex items-center gap-1.5 text-xs font-medium tabular-nums text-slate-700 dark:text-slate-300', !counts[s] && 'opacity-40')}
+          title={compact ? SEVERITY_STYLES[s].label : undefined}
+        >
+          <span className={cx('h-1.5 w-1.5 rounded-full', SEVERITY_STYLES[s].dot)} aria-hidden="true" />
           {counts[s] ?? 0}
-          {!compact && <span className="text-slate-500 dark:text-slate-400">{SEVERITY_STYLES[s].label}</span>}
+          <span className={compact ? 'sr-only' : 'text-slate-500 dark:text-slate-400'}>{SEVERITY_STYLES[s].label}</span>
         </span>
       ))}
     </div>
