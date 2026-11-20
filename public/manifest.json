@@ -29,7 +29,12 @@
     "type": "module"
   },
   "permissions": ["storage", "activeTab", "sidePanel"],
-  "host_permissions": ["http://localhost:4000/*"],
+  "host_permissions": [
+    "http://localhost:4000/*",
+    "https://github.com/*",
+    "https://raw.githubusercontent.com/*",
+    "https://codeload.github.com/*"
+  ],
   "optional_host_permissions": ["https://*/*", "http://localhost/*"],
   "content_scripts": [
     {

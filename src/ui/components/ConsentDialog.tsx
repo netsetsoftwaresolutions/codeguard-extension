@@ -11,6 +11,7 @@ export function ConsentDialog({
   onAccept,
   onCancel,
   busy,
+  browserSession,
 }: {
   open: boolean;
   apiBaseUrl: string;
@@ -20,6 +21,8 @@ export function ConsentDialog({
   onAccept: () => void;
   onCancel: () => void;
   busy?: boolean;
+  /** The source will be read with the user's GitHub sign-in in this browser. */
+  browserSession?: boolean;
 }) {
   const acceptRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -51,7 +54,9 @@ export function ConsentDialog({
           {sourceLabel}
         </p>
         <p id="consent-body" className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-          {consentText(host, productName)}
+          {browserSession
+            ? `${productName} will read this code from GitHub using your sign-in in this browser and upload it to ${host} for security analysis. Your GitHub password, cookies and tokens are never read or sent.`
+            : consentText(host, productName)}
         </p>
         <div className="mt-3 flex justify-end gap-2">
           <button type="button" className="cg-btn-secondary" onClick={onCancel}>

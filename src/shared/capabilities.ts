@@ -21,6 +21,8 @@ export interface ScanAction {
   primary?: boolean;
   ref?: string | null;
   path?: string | null;
+  /** Source is fetched with the user's GitHub browser session and uploaded (API cannot read it). */
+  browserSession?: boolean;
 }
 
 /**
@@ -43,6 +45,9 @@ export function getScanActions(
     const isPr = parsed.kind === 'PULL_REQUEST' || parsed.kind === 'MERGE_REQUEST';
     const resolved = resolveRef(parsed, { branchHint: opts.branchHint, branches: inspection.branches });
     const currentRef = resolved.ref ?? (isPr ? null : inspection.defaultBranch);
+    // Private GitHub repo the API cannot read: the user's own signed-in GitHub session can.
+    const browser = parsed.provider === 'GITHUB' && !inspection.accessible && !isPr;
+    const noRef = currentRef ? undefined : 'The current branch could not be determined.';
 
     if (isPr) {
       actions.push({
@@ -57,11 +62,12 @@ export function getScanActions(
       actions.push({
         id: 'SCAN_FILE',
         label: 'Scan current file',
-        enabled: caps.scanFile && !!currentRef,
-        reason: off(caps.scanFile, 'File scanning is not available for this source.') ?? (currentRef ? undefined : 'The current branch could not be determined.'),
+        enabled: (browser || caps.scanFile) && !!currentRef,
+        reason: (browser ? undefined : off(caps.scanFile, 'File scanning is not available for this source.')) ?? noRef,
         primary: true,
         ref: currentRef,
         path: resolved.path,
+        ...(browser ? { browserSession: true } : {}),
       });
     }
     if (parsed.kind === 'FOLDER' && resolved.path) {
@@ -69,7 +75,9 @@ export function getScanActions(
         id: 'SCAN_FOLDER_PATH',
         label: 'Scan this folder',
         enabled: caps.scanFolder && !!currentRef,
-        reason: off(caps.scanFolder, 'Folder scanning is not available for this source.') ?? (currentRef ? undefined : 'The current branch could not be determined.'),
+        reason: browser
+          ? 'Folder scans of private repositories need the GitHub integration. Scan the current branch instead.'
+          : off(caps.scanFolder, 'Folder scanning is not available for this source.') ?? noRef,
         ref: currentRef,
         path: resolved.path,
       });
@@ -78,23 +86,27 @@ export function getScanActions(
       actions.push({
         id: 'SCAN_BRANCH',
         label: currentRef ? `Scan current branch (${currentRef})` : 'Scan current branch',
-        enabled: caps.scanBranch && !!currentRef,
-        reason: off(caps.scanBranch, 'Branch scanning is not available for this source.') ?? (currentRef ? undefined : 'The current branch could not be determined.'),
+        enabled: (browser || caps.scanBranch) && !!currentRef,
+        reason: (browser ? undefined : off(caps.scanBranch, 'Branch scanning is not available for this source.')) ?? noRef,
         ref: currentRef,
+        ...(browser ? { browserSession: true } : {}),
       });
     }
     actions.push({
       id: 'SCAN_REPOSITORY',
-      label: 'Scan entire repository',
-      enabled: caps.scanRepository,
-      reason: off(caps.scanRepository, 'Repository scanning is not available for this source.'),
+      label: browser ? 'Scan entire repository (default branch)' : 'Scan entire repository',
+      enabled: browser || caps.scanRepository,
+      reason: browser ? undefined : off(caps.scanRepository, 'Repository scanning is not available for this source.'),
       primary: parsed.kind === 'REPOSITORY' && !parsed.ref,
+      ...(browser ? { browserSession: true } : {}),
     });
     actions.push({
       id: 'SCAN_ALL_BRANCHES',
       label: inspection.branches ? `Scan all accessible branches (${inspection.branches.length})` : 'Scan all accessible branches',
       enabled: caps.scanAllBranches,
-      reason: off(caps.scanAllBranches, 'Multi-branch scanning is not available (plan or provider limitation).'),
+      reason: browser
+        ? 'Scanning all branches of a private repository needs the GitHub integration.'
+        : off(caps.scanAllBranches, 'Multi-branch scanning is not available (plan or provider limitation).'),
     });
     return actions;
   }

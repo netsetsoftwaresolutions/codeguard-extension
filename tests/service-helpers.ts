@@ -25,6 +25,7 @@ export function fakeApi(inspection: SourceInspection) {
     scanBranch: vi.fn(async (_body: unknown, _idem?: string) => created),
     scanPullRequest: vi.fn(async (_body: unknown, _idem?: string) => created),
     scanUrl: vi.fn(async (_body: unknown, _idem?: string) => created),
+    uploadScan: vi.fn(async (_body: FormData, _idem?: string) => created),
     meta: vi.fn(),
     me: vi.fn(),
     login: vi.fn(),
@@ -36,13 +37,14 @@ export function fakeApi(inspection: SourceInspection) {
   };
 }
 
-export async function makeService(opts: { inspection: SourceInspection; settings?: Partial<Settings>; signedIn?: boolean; now?: number }) {
+export async function makeService(opts: { inspection: SourceInspection; settings?: Partial<Settings>; signedIn?: boolean; now?: number; fetchFn?: typeof fetch }) {
   const now = opts.now ?? Date.parse('2026-10-22T12:00:00Z');
   const store = new Store(memoryKV(), memoryKV(), () => now);
   if (opts.signedIn !== false) await store.setAuth(AUTH);
   await store.updateSettings({ organizationId: 'org_1', ...(opts.settings ?? {}) });
   const api = fakeApi(opts.inspection);
   const trackScan = vi.fn(async () => undefined);
+  const broadcast = vi.fn();
   const service = new BackgroundService({
     store,
     api: api as unknown as CodeGuardApi,
@@ -51,8 +53,9 @@ export async function makeService(opts: { inspection: SourceInspection; settings
     openSidePanel: vi.fn(async () => undefined),
     hasHostPermission: vi.fn(async () => true),
     getActiveTab: vi.fn(async () => null),
-    broadcast: vi.fn(),
+    broadcast,
     trackScan,
+    fetchFn: opts.fetchFn,
   });
-  return { service, store, api, trackScan, now };
+  return { service, store, api, trackScan, broadcast, now };
 }
