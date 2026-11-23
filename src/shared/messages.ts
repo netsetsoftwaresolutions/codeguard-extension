@@ -34,9 +34,13 @@ export interface StartScanRequest {
   path?: string | null;
   /** True only after the user accepted the consent dialog. */
   consent?: boolean;
-  /** Tab to attach the badge to. */
+  /** Tab to attach the badge to. Required for browserSession scans (must show this repository). */
   tabId?: number | null;
+  /** Fetch the source with the user's GitHub browser session, then upload it (private GitHub repos). */
+  browserSession?: boolean;
 }
+
+export type BrowserScanStep = 'CHECKING_ACCESS' | 'RETRIEVING' | 'PREPARING' | 'UPLOADING';
 
 /** Messages that only extension pages (popup, side panel) may send. */
 export type UiMessage =
@@ -59,7 +63,8 @@ export type ExtensionMessage = ContentMessage | UiMessage;
 /** Broadcasts from the background to open extension pages. */
 export type BroadcastMessage =
   | { type: 'SOURCE_CHANGED'; tabId: number }
-  | { type: 'AUTH_CHANGED' };
+  | { type: 'AUTH_CHANGED' }
+  | { type: 'BROWSER_SCAN_PROGRESS'; step: BrowserScanStep };
 
 export const CONTENT_MESSAGE_TYPES = ['PAGE_DETECTED', 'OPEN_SIDE_PANEL', 'DISMISS_BUTTON'] as const;
 export const UI_MESSAGE_TYPES = [
@@ -77,7 +82,7 @@ export const UI_MESSAGE_TYPES = [
   'LIST_RECENT_SCANS',
   'SET_AUTO_SCAN',
 ] as const;
-export const BROADCAST_MESSAGE_TYPES = ['SOURCE_CHANGED', 'AUTH_CHANGED'] as const;
+export const BROADCAST_MESSAGE_TYPES = ['SOURCE_CHANGED', 'AUTH_CHANGED', 'BROWSER_SCAN_PROGRESS'] as const;
 
 const SCAN_ACTIONS: readonly ScanActionId[] = [
   'SCAN_FILE',
@@ -274,7 +279,8 @@ function validUiMessage(m: Record<string, unknown>): boolean {
       if (!only(m, ['type', 'request']) || !isObj(m.request)) return false;
       const r = m.request;
       return (
-        only(r, ['action', 'sourceUrl', 'ref', 'path', 'consent', 'tabId']) &&
+        only(r, ['action', 'sourceUrl', 'ref', 'path', 'consent', 'tabId', 'browserSession']) &&
+        (r.browserSession === undefined || isBool(r.browserSession)) &&
         SCAN_ACTIONS.includes(r.action as ScanActionId) &&
         isHttpUrl(r.sourceUrl) &&
         isOptStr(r.ref, 255) &&

@@ -19,6 +19,7 @@ import {
 import { isDefaultApiOrigin, normalizeBaseUrl, originPatternFor, type Settings } from '../shared/settings';
 import { acceptBranchHint, isGitProvider, repositoryUrl, shouldShowFloatingButton, sourceKey, sourceKeyForUrl } from '../shared/source';
 import { toErrorInfo, type CodeGuardApi, type RepositoryScanBody, type UrlScanBody } from './api-client';
+import { fetchGitHubSource } from './github-session';
 import type { Store } from './store';
 
 export class ServiceError extends Error {
@@ -42,6 +43,8 @@ export interface ServiceDeps {
   broadcast: (m: BroadcastMessage) => void;
   trackScan: (tabId: number, scanIds: string[]) => Promise<void>;
   newIdempotencyKey?: () => string;
+  /** Used for GitHub browser-session fetches (tests inject a fake). */
+  fetchFn?: typeof fetch;
 }
 
 /** Background message router + business logic. All API access happens here. */
@@ -313,6 +316,10 @@ export class BackgroundService {
     if (!parsed.supported) throw new ServiceError('UNSUPPORTED_SOURCE', 'This page is not a supported source.');
     const key = sourceKey(parsed);
 
+    // Browser-session scans read private code with the user's GitHub login: ask every time.
+    if (req.browserSession && req.consent !== true) {
+      throw new ServiceError('CONSENT_REQUIRED', 'Consent is required before private source code is read from GitHub and uploaded.');
+    }
     // Consent gate: enforced here, not only in the UI.
     const visibility = await this.visibilityFor(parsed, req.sourceUrl);
     const consents = await store.getConsents();
@@ -343,7 +350,8 @@ export class BackgroundService {
     const urlBody = (url: string): UrlScanBody => ({ target, url, options, ...(consent ? { consent } : {}) });
 
     let res: ScanCreatedResponse;
-    switch (req.action) {
+    if (req.browserSession) res = await this.browserScan(req, parsed, organizationId, settings.enableAi, idem);
+    else switch (req.action) {
       case 'SCAN_FILE':
       case 'SCAN_FOLDER_PATH':
         if (!req.ref || !req.path) throw new ServiceError('VALIDATION', 'A branch and path are required.');
@@ -380,6 +388,50 @@ export class BackgroundService {
       await this.deps.trackScan(req.tabId, res.scans.map((s) => s.id)).catch(() => undefined);
     }
     return res;
+  }
+
+  /**
+   * Private GitHub repository the API cannot read: fetch the file / snapshot with the user's GitHub
+   * browser session (background only, in memory) and send it through the normal upload scan.
+   */
+  private async browserScan(req: StartScanRequest, parsed: ParsedSource, organizationId: string, enableAi: boolean, idem?: string): Promise<ScanCreatedResponse> {
+    const { store, api } = this.deps;
+    const repoUrl = repositoryUrl(parsed);
+    if (parsed.provider !== 'GITHUB' || !parsed.owner || !parsed.repo || !repoUrl) {
+      throw new ServiceError('UNSUPPORTED_SOURCE', 'Browser-session scanning is only available for GitHub repositories.');
+    }
+    if (req.action !== 'SCAN_FILE' && req.action !== 'SCAN_BRANCH' && req.action !== 'SCAN_REPOSITORY') {
+      throw new ServiceError('UNSUPPORTED_SOURCE', 'This scan needs the GitHub integration.');
+    }
+    // Only the repository open in the user's tab may be read.
+    const tab = typeof req.tabId === 'number' ? await store.getTabSource(req.tabId) : null;
+    const tabParsed = tab ? parseSourceUrl(tab.url) : null;
+    if (!tabParsed?.supported || sourceKey(tabParsed) !== sourceKey(parsed)) {
+      throw new ServiceError('FORBIDDEN', 'Open this repository in the current tab and try again.');
+    }
+    if (req.action === 'SCAN_FILE' && (!req.ref || !req.path)) throw new ServiceError('VALIDATION', 'A branch and file path are required.');
+    if (req.action === 'SCAN_BRANCH' && !req.ref) throw new ServiceError('VALIDATION', 'A branch is required.');
+
+    const maxBytes = (await store.getMeta())?.limits.maxUploadBytes ?? 200 * 1024 * 1024;
+    const ref = req.action === 'SCAN_REPOSITORY' ? null : req.ref!;
+    const path = req.action === 'SCAN_FILE' ? req.path! : null;
+    const src = await fetchGitHubSource(
+      { owner: parsed.owner, repo: parsed.repo, ref, path },
+      { maxBytes, fetchFn: this.deps.fetchFn, onStep: (step) => this.deps.broadcast({ type: 'BROWSER_SCAN_PROGRESS', step }) },
+    );
+    validateUploadFiles([{ name: src.name, path: src.relativePath, blob: src.blob }], maxBytes);
+
+    this.deps.broadcast({ type: 'BROWSER_SCAN_PROGRESS', step: 'UPLOADING' });
+    const body = new FormData();
+    body.append('organizationId', organizationId);
+    body.append('enableAi', String(enableAi));
+    body.append('relativePaths', JSON.stringify([src.relativePath]));
+    body.append('acquisition', 'browser-session');
+    body.append('sourceUrl', repoUrl);
+    if (ref) body.append('ref', ref);
+    if (path) body.append('path', path);
+    body.append('files', src.blob, src.name);
+    return api.uploadScan(body, idem);
   }
 
   async setAutoScan(sourceUrl: string, enabled: boolean): Promise<Settings> {

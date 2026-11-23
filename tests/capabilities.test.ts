@@ -61,8 +61,8 @@ describe('getScanActions', () => {
     expect(actions.find((a) => a.id === 'SCAN_BRANCH')).toMatchObject({ ref: 'feature/login' });
   });
 
-  it('respects capability flags for repository scans', () => {
-    const url = 'https://github.com/acme/app';
+  it('respects capability flags for repository scans (inaccessible GitHub repos use the browser session instead)', () => {
+    const url = 'https://gitlab.com/acme/app';
     const insp = inspectionFor(url, { accessible: false });
     insp.capabilities = { scanFile: false, scanBranch: false, scanRepository: false, scanAllBranches: false, scanPullRequest: false, scanFolder: false };
     const actions = getScanActions(parseSourceUrl(url), insp);

@@ -109,11 +109,14 @@ export function Spinner({ size = 16, className }: { size?: number; className?: s
   );
 }
 
-export function ProgressBar({ value, className }: { value: number; className?: string }) {
+export function ProgressBar({ value, active, className }: { value: number; active?: boolean; className?: string }) {
   const v = Math.max(0, Math.min(100, value));
   return (
-    <div className={cx('h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-ink-600', className)} role="progressbar" aria-valuenow={v} aria-valuemin={0} aria-valuemax={100}>
+    <div className={cx('relative h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-ink-600', className)} role="progressbar" aria-valuenow={v} aria-valuemin={0} aria-valuemax={100} aria-busy={active || undefined}>
       <div className="h-full rounded-full bg-brand-600 transition-all duration-500" style={{ width: `${v}%` }} />
+      {active && (
+        <div className="absolute inset-0 animate-shimmer bg-gradient-to-r from-transparent via-white/40 to-transparent motion-reduce:hidden dark:via-white/15" aria-hidden="true" />
+      )}
     </div>
   );
 }

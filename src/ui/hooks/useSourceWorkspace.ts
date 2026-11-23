@@ -1,7 +1,7 @@
 import type { ScanCreatedResponse, SourceInspection } from '../../contracts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getScanActions, type ScanAction } from '../../shared/capabilities';
-import type { ExtensionState } from '../../shared/messages';
+import { isBroadcastFromBackground, type BrowserScanStep, type ExtensionState } from '../../shared/messages';
 import { UiError, errorMessage, send } from '../messaging';
 import { useActiveSource } from './useActiveSource';
 
@@ -19,6 +19,15 @@ export function useSourceWorkspace(state: ExtensionState, opts: { follow: boolea
   const [starting, setStarting] = useState<ScanAction['id'] | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [consentFor, setConsentFor] = useState<ScanAction | null>(null);
+  const [browserStep, setBrowserStep] = useState<BrowserScanStep | null>(null);
+
+  useEffect(() => {
+    const onMessage = (msg: unknown, sender: chrome.runtime.MessageSender) => {
+      if (isBroadcastFromBackground(msg, sender, chrome.runtime.id) && msg.type === 'BROWSER_SCAN_PROGRESS') setBrowserStep(msg.step);
+    };
+    chrome.runtime.onMessage.addListener(onMessage);
+    return () => chrome.runtime.onMessage.removeListener(onMessage);
+  }, []);
 
   const orgId = state.settings.organizationId;
   const signedIn = state.auth.signedIn;
@@ -58,10 +67,11 @@ export function useSourceWorkspace(state: ExtensionState, opts: { follow: boolea
       if (!source?.url) return;
       setStarting(action.id);
       setScanError(null);
+      setBrowserStep(null);
       try {
         const res = await send({
           type: 'START_SCAN',
-          request: { action: action.id, sourceUrl: source.url, ref: action.ref ?? null, path: action.path ?? null, consent, tabId: source.tabId },
+          request: { action: action.id, sourceUrl: source.url, ref: action.ref ?? null, path: action.path ?? null, consent, tabId: source.tabId, ...(action.browserSession ? { browserSession: true } : {}) },
         });
         setCreated(res);
         setSelectedScanId(res.scans[0]?.id ?? null);
@@ -75,6 +85,7 @@ export function useSourceWorkspace(state: ExtensionState, opts: { follow: boolea
         }
       } finally {
         setStarting(null);
+        setBrowserStep(null);
       }
     },
     [source],
@@ -107,6 +118,7 @@ export function useSourceWorkspace(state: ExtensionState, opts: { follow: boolea
     actions,
     startScan,
     starting,
+    browserStep,
     scanError,
     consentFor,
     acceptConsent,

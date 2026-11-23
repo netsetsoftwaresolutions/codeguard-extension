@@ -63,6 +63,7 @@ If the API is unreachable the popup and side panel show a red banner
 | `activeTab` | Lets the popup read the URL of the current tab when the user clicks the toolbar icon, without the broad `tabs` permission. |
 | `sidePanel` | The side panel with scan options and the findings list. |
 | `host_permissions: http://localhost:4000/*` | The default API. |
+| `host_permissions: https://github.com/*, https://raw.githubusercontent.com/*, https://codeload.github.com/*` | Private GitHub scans with the browser session (see below). Only the background reads these hosts, only after consent. |
 | `optional_host_permissions: https://*/*, http://localhost/*` | Requested at runtime **only** for the API host the user configures. |
 | Content scripts on `github.com`, `gitlab.com`, `bitbucket.org`, `www.dropbox.com`, `drive.google.com` | Page detection (URL + optional branch name) and the floating button on git repository pages. |
 
@@ -254,6 +255,26 @@ have a two-minute timeout. There is an uploading indicator, rather than byte-lev
 
 Validation, sender restrictions and multipart transport have automated tests. Live Chrome file/folder
 picker, IndexedDB handoff, and upload-to-report verification remain manual QA tasks.
+
+## Private GitHub repositories (browser session)
+
+When the API cannot read a GitHub repository (private, no integration), the extension offers
+**Scan current file**, **Scan current branch (name)** and **Scan entire repository (default branch)**.
+After the user confirms (every time), the background service worker requests the code from
+`github.com` with `credentials: 'include'`. Chrome attaches the user's own GitHub cookies because the
+extension has host permission; the extension never reads, stores or sends cookies, passwords or tokens.
+
+- File: `github.com/<owner>/<repo>/raw/<ref>/<path>` (GitHub redirects to `raw.githubusercontent.com`).
+- Branch / default branch: `github.com/<owner>/<repo>/archive/<ref | HEAD>.zip` (redirects to `codeload.github.com`).
+- Only the repository shown in the requesting tab is fetched. Redirects to other hosts, the GitHub
+  sign-in page, HTML pages, non-ZIP snapshots and data over the plan upload limit are refused.
+- The bytes stay in service-worker memory and go to the existing `POST /api/scans/upload` with
+  `acquisition=browser-session`, `sourceUrl`, `ref`, `path`. The scanner treats it as a normal upload.
+
+Limits: one request may run at most 4 minutes (Chrome stops longer service-worker work). Folder
+scans, all-branch scans and pull requests still need the GitHub integration. Organizations that
+enforce SAML SSO need an active SSO session in the browser. Live Chrome behaviour must be checked
+manually on a real private repository; automated tests use a fake `fetch`.
 
 ## 11. Status
 

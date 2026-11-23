@@ -1,7 +1,7 @@
 import { Spinner } from '../../components/primitives';
-import { ExternalLink, PanelRight, Upload } from 'lucide-react';
+import { Check, Circle, ExternalLink, PanelRight, Plug, Upload } from 'lucide-react';
 import { useState } from 'react';
-import type { ExtensionState } from '../../shared/messages';
+import type { BrowserScanStep, ExtensionState } from '../../shared/messages';
 import { dashboardLink, errorMessage, openTab, send } from '../messaging';
 import { useRecentScans } from '../hooks/useRecentScans';
 import { useSourceWorkspace } from '../hooks/useSourceWorkspace';
@@ -12,6 +12,29 @@ import { ScanActions } from './ScanActions';
 import { ScanList } from './ScanList';
 import { ScanStatusPanel } from './ScanStatusPanel';
 import { SourceCard } from './SourceCard';
+
+const BROWSER_STEPS: BrowserScanStep[] = ['CHECKING_ACCESS', 'RETRIEVING', 'PREPARING', 'UPLOADING'];
+
+/** Progress of a scan whose source is read with the user's GitHub browser session. */
+function BrowserSteps({ step, productName }: { step: BrowserScanStep | null; productName: string }) {
+  const labels: Record<BrowserScanStep, string> = {
+    CHECKING_ACCESS: 'Checking browser access',
+    RETRIEVING: 'Retrieving source code',
+    PREPARING: 'Preparing source',
+    UPLOADING: `Uploading to ${productName}`,
+  };
+  const current = step ? BROWSER_STEPS.indexOf(step) : 0;
+  return (
+    <ol className="mt-2 space-y-1 text-xs" aria-live="polite" aria-label="Scan preparation progress">
+      {BROWSER_STEPS.map((s, i) => (
+        <li key={s} className={i <= current ? 'flex items-center gap-2' : 'flex items-center gap-2 text-slate-500 dark:text-slate-400'} aria-current={i === current ? 'step' : undefined}>
+          {i < current ? <Check size={12} className="text-emerald-500" aria-hidden="true" /> : i === current ? <Spinner size={12} /> : <Circle size={12} aria-hidden="true" />}
+          {labels[s]}
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 /** Main signed-in view shared by the popup (compact) and the side panel (with findings). */
 export function Workspace({ state, variant, onStateChange }: { state: ExtensionState; variant: 'popup' | 'sidepanel'; onStateChange: () => void }) {
@@ -42,6 +65,8 @@ export function Workspace({ state, variant, onStateChange }: { state: ExtensionS
   const listedIds = new Set(ws.previousScans.slice(0, compact ? 3 : 20).map((s) => s.id));
   const recentOthers = (recent.scans ?? []).filter((s) => !listedIds.has(s.id));
   const showActions = !!ws.source?.parsed?.supported;
+  const browserMode = ws.actions.some((a) => a.browserSession);
+  const browserRunning = !!ws.starting && !!ws.actions.find((a) => a.id === ws.starting)?.browserSession;
 
   return (
     <main className="space-y-3 p-3">
@@ -54,6 +79,17 @@ export function Workspace({ state, variant, onStateChange }: { state: ExtensionS
             <ScanActions actions={ws.actions} onScan={ws.startScan} starting={ws.starting} disabled={!state.apiReachable} />
           ) : (
             <p className="text-xs text-slate-500 dark:text-slate-400">No scan options are available for this page.</p>
+          )}
+          {browserRunning && <BrowserSteps step={ws.browserStep} productName={state.productName} />}
+          {browserMode && !browserRunning && (
+            <>
+              <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                Private repository: the code is read with your GitHub sign-in in this browser, only after you confirm.
+              </p>
+              <button type="button" className="cg-btn-secondary mt-1.5 w-full justify-start" onClick={() => openTab(dashboardLink(dashboardUrl, '/integrations'))}>
+                <Plug size={14} aria-hidden="true" /> Connect GitHub integration (optional)
+              </button>
+            </>
           )}
           {state.settings.enableAi && <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">AI explanations are enabled for new scans.</p>}
         </Section>
@@ -80,7 +116,7 @@ export function Workspace({ state, variant, onStateChange }: { state: ExtensionS
 
       <div className="flex gap-2">
         <button type="button" className="cg-btn-secondary flex-1" onClick={() => void chrome.tabs.create({ url: chrome.runtime.getURL('upload.html') })}>
-          <Upload size={14} aria-hidden="true" /> Upload
+          <Upload size={14} aria-hidden="true" /> {compact ? 'Upload' : 'Upload source code'}
         </button>
         {compact && (
           <>
@@ -129,6 +165,7 @@ export function Workspace({ state, variant, onStateChange }: { state: ExtensionS
         onAccept={ws.acceptConsent}
         onCancel={ws.declineConsent}
         busy={!!ws.starting}
+        browserSession={!!ws.consentFor?.browserSession}
       />
     </main>
   );

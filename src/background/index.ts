@@ -4,6 +4,7 @@
  */
 import { ApiClient, CodeGuardApi } from './api-client';
 import { chromeBadgeApi, ScanTracker } from './badge';
+import type { BroadcastMessage } from '../shared/messages';
 import { BackgroundService } from './service';
 import { chromeKV, Store } from './store';
 
@@ -22,7 +23,7 @@ const api = new CodeGuardApi(
 
 const tracker = new ScanTracker(store, api, chromeBadgeApi());
 
-function broadcast(message: { type: 'SOURCE_CHANGED'; tabId: number } | { type: 'AUTH_CHANGED' }): void {
+function broadcast(message: BroadcastMessage): void {
   // Rejects with "Receiving end does not exist" when no extension page is open — expected.
   chrome.runtime.sendMessage(message).catch(() => undefined);
 }

@@ -68,7 +68,7 @@ export function ScanStatusPanel({
             <span>{status.stage ? STAGE_LABELS[status.stage] : 'Waiting in queue'}</span>
             <span className="tabular-nums">{Math.round(status.progress)}%</span>
           </div>
-          <ProgressBar value={status.progress} />
+          <ProgressBar value={status.progress} active />
         </div>
       )}
 
