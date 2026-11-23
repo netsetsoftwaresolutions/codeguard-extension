@@ -99,7 +99,10 @@ export function useSourceWorkspace(state: ExtensionState, opts: { follow: boolea
   const startScan = useCallback((action: ScanAction) => void run(action, false), [run]);
 
   const acceptConsent = useCallback(() => {
-    if (consentFor) void run(consentFor, true);
+    if (!consentFor) return;
+    // Close right away so the progress steps behind the dialog are visible.
+    setConsentFor(null);
+    void run(consentFor, true);
   }, [consentFor, run]);
   const declineConsent = useCallback(() => setConsentFor(null), []);
 

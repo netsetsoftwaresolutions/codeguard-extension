@@ -45,7 +45,7 @@ describe('ScanActions', () => {
 });
 
 describe('ScanSummary', () => {
-  it('shows risk, categories, limitations and the suspicious ≠ malware disclaimer', () => {
+  it('shows a plain verdict, top categories, limitations and the disclaimer', () => {
     const scan = scanView({
       summary: {
         severityCounts: { CRITICAL: 1, HIGH: 2, MEDIUM: 0, LOW: 0, INFO: 3 },
@@ -61,9 +61,8 @@ describe('ScanSummary', () => {
       },
     });
     render(<ScanSummary scan={scan} />);
-    expect(screen.getByText('High risk')).toBeTruthy();
-    expect(screen.getByText('Risk categories')).toBeTruthy();
-    expect(screen.getByText(/Obfuscation/)).toBeTruthy();
+    expect(screen.getByText('Malware found')).toBeTruthy();
+    expect(screen.getByText('Hidden or scrambled code')).toBeTruthy();
     expect(screen.getByText('semgrep not installed')).toBeTruthy();
     expect(screen.getByText(/not confirmed malware/)).toBeTruthy();
     expect(screen.getByText(/No scan can guarantee/)).toBeTruthy();
