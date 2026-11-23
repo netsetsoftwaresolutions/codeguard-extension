@@ -77,7 +77,7 @@ export function ScanStatusPanel({
       {status?.status === 'COMPLETED_WITH_ERRORS' && status.errorMessage && <Notice tone="warning">{status.errorMessage}</Notice>}
       {error && <Notice tone="error">{error}</Notice>}
 
-      {terminal && scan && (scan.status === 'COMPLETED' || scan.status === 'COMPLETED_WITH_ERRORS') && <ScanSummary scan={scan} compact={compact} />}
+      {terminal && scan && (scan.status === 'COMPLETED' || scan.status === 'COMPLETED_WITH_ERRORS') && <ScanSummary scan={scan} />}
 
       <button type="button" className="cg-btn-secondary w-full" onClick={() => openTab(reportUrl)}>
         <ExternalLink size={14} aria-hidden="true" /> {isGroup ? 'Open branch comparison' : 'Open full report'}

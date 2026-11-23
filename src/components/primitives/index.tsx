@@ -121,34 +121,6 @@ export function ProgressBar({ value, active, className }: { value: number; activ
   );
 }
 
-export function SeverityBar({ counts, className }: { counts: SeverityCounts; className?: string }) {
-  const total = SEVERITIES.reduce((s, k) => s + (counts[k] ?? 0), 0);
-  if (!total) return <div className={cx('h-2 w-full rounded-full bg-green-500/30', className)} title="No findings" />;
-  return (
-    <div className={cx('flex h-2 w-full overflow-hidden rounded-full', className)} title={SEVERITIES.map((s) => `${SEVERITY_STYLES[s].label}: ${counts[s] ?? 0}`).join(', ')}>
-      {SEVERITIES.map((s) => (counts[s] ? <div key={s} className={SEVERITY_STYLES[s].dot} style={{ width: `${(counts[s] / total) * 100}%` }} /> : null))}
-    </div>
-  );
-}
-
-export function SeverityCountsRow({ counts, compact }: { counts: SeverityCounts; compact?: boolean }) {
-  return (
-    <div className={cx('flex gap-x-3 gap-y-1', compact ? 'flex-nowrap' : 'flex-wrap')}>
-      {SEVERITIES.map((s) => (
-        <span
-          key={s}
-          className={cx('inline-flex items-center gap-1.5 text-xs font-medium tabular-nums text-slate-700 dark:text-slate-300', !counts[s] && 'opacity-40')}
-          title={compact ? SEVERITY_STYLES[s].label : undefined}
-        >
-          <span className={cx('h-1.5 w-1.5 rounded-full', SEVERITY_STYLES[s].dot)} aria-hidden="true" />
-          {counts[s] ?? 0}
-          <span className={compact ? 'sr-only' : 'text-slate-500 dark:text-slate-400'}>{SEVERITY_STYLES[s].label}</span>
-        </span>
-      ))}
-    </div>
-  );
-}
-
 export function EmptyState({ title, description, action, icon }: { title: string; description?: string; action?: ReactNode; icon?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 px-6 py-12 text-center dark:border-ink-500">
