@@ -138,9 +138,26 @@ describe('browser-session scans in the background', () => {
     expect(api.uploadScan).not.toHaveBeenCalled();
   });
 
-  it('uploads the file with validated repository metadata and reports progress', async () => {
+  it('scans in the browser by default and sends only results, never the source', async () => {
     const { service, api, broadcast, trackScan } = await setup();
     expect(await start(service, { consent: true })).toMatchObject({ ok: true });
+    expect(api.uploadScan).not.toHaveBeenCalled();
+    const body = api.browserScan.mock.calls[0]![0];
+    expect(body.get('sourceUrl')).toBe(REPO);
+    expect(body.get('ref')).toBe('main');
+    expect(body.get('path')).toBe('src/a.ts');
+    expect(body.get('files')).toBeNull();
+    const results = JSON.parse(await (body.get('results') as Blob).text());
+    expect(results.inventory.map((e: { path: string }) => e.path)).toEqual(['src/a.ts']);
+    expect(results.dependencyFiles).toEqual([]);
+    expect(JSON.stringify(results)).not.toContain('const key = 1;');
+    expect(broadcast.mock.calls.map(([m]) => m.step).filter(Boolean)).toEqual(['CHECKING_ACCESS', 'RETRIEVING', 'PREPARING', 'SCANNING', 'UPLOADING']);
+    expect(trackScan).toHaveBeenCalledWith(7, ['scan_new']);
+  });
+
+  it('uploads the file with validated repository metadata on a deep scan', async () => {
+    const { service, api, broadcast, trackScan } = await setup();
+    expect(await start(service, { consent: true, deep: true })).toMatchObject({ ok: true });
     const body = api.uploadScan.mock.calls[0]![0];
     expect(body.get('acquisition')).toBe('browser-session');
     expect(body.get('sourceUrl')).toBe(REPO);

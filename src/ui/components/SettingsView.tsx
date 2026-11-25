@@ -2,7 +2,7 @@ import { Spinner } from '../../components/primitives';
 import { Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import type { ExtensionState } from '../../shared/messages';
-import { isDefaultApiOrigin, normalizeBaseUrl, originPatternFor, type ScanMode, type Settings } from '../../shared/settings';
+import { normalizeBaseUrl, type ScanMode, type Settings } from '../../shared/settings';
 import { errorMessage } from '../messaging';
 import { Notice, Section, Toggle } from './common';
 
@@ -38,19 +38,8 @@ export function SettingsView({
       return;
     }
     const apiChanged = api !== settings.apiBaseUrl;
-    // chrome.permissions.request must run synchronously within the click (user gesture).
-    const pattern = apiChanged && !isDefaultApiOrigin(api) ? originPatternFor(api) : null;
-    const granted: Promise<boolean> = pattern ? chrome.permissions.request({ origins: [pattern] }) : Promise.resolve(true);
     setSaving(true);
-    void granted
-      .then(async (ok) => {
-        if (!ok) {
-          setMessage({ tone: 'error', text: `Permission to access ${pattern} was denied; the API URL was not changed.` });
-          return;
-        }
-        await apply({ apiBaseUrl: api, dashboardUrl: dash }, apiChanged ? 'Saved. You were signed out because the API changed.' : 'Saved.');
-      })
-      .catch((err) => setMessage({ tone: 'error', text: errorMessage(err) }))
+    void apply({ apiBaseUrl: api, dashboardUrl: dash }, apiChanged ? 'Saved. You were signed out because the API changed.' : 'Saved.')
       .finally(() => setSaving(false));
   };
 

@@ -20,6 +20,8 @@ import { isDefaultApiOrigin, normalizeBaseUrl, originPatternFor, type Settings }
 import { acceptBranchHint, isGitProvider, repositoryUrl, shouldShowFloatingButton, sourceKey, sourceKeyForUrl } from '../shared/source';
 import { toErrorInfo, type CodeGuardApi, type RepositoryScanBody, type UrlScanBody } from './api-client';
 import { fetchGitHubSource } from './github-session';
+import { BROWSER_SCAN_ACTIONS } from '../shared/capabilities';
+import { isArchiveName, LocalScanError, scanLocally, unpack, type BrowserScanResults, type SourceFile } from './local-scan';
 import type { Store } from './store';
 
 export class ServiceError extends Error {
@@ -39,6 +41,7 @@ export interface ServiceDeps {
   /** Must be invoked synchronously from the message listener to keep the user gesture. */
   openSidePanel: (tabId: number) => Promise<void>;
   hasHostPermission: (originPattern: string) => Promise<boolean>;
+  requestHostPermission: (originPattern: string) => Promise<boolean>;
   getActiveTab: () => Promise<{ id?: number; url?: string } | null>;
   broadcast: (m: BroadcastMessage) => void;
   trackScan: (tabId: number, scanIds: string[]) => Promise<void>;
@@ -146,8 +149,16 @@ export class BackgroundService {
         this.deps.broadcast({ type: 'AUTH_CHANGED' });
         return this.getState(false);
       }
-      case 'UPDATE_SETTINGS':
+      case 'UPDATE_SETTINGS': {
+        const pattern = m.patch.apiBaseUrl && !isDefaultApiOrigin(m.patch.apiBaseUrl)
+          ? originPatternFor(m.patch.apiBaseUrl) : null;
+        // Start before any await to preserve the Save click's user gesture.
+        // Finish in the worker even if the permission prompt closes the popup.
+        if (pattern && !(await this.deps.requestHostPermission(pattern))) {
+          throw new ServiceError('PERMISSION_REQUIRED', `Permission to access ${pattern} was denied; URLs were not saved.`);
+        }
         return this.updateSettings(m.patch);
+      }
       case 'GET_ACTIVE_SOURCE':
         return this.getActiveSource(m.tabId ?? null);
       case 'INSPECT_SOURCE':
@@ -160,6 +171,15 @@ export class BackgroundService {
         const settings = await store.getSettings();
         const meta = await store.getMeta();
         validateUploadFiles(files, meta?.limits.maxUploadBytes ?? 200 * 1024 * 1024);
+        if (!m.deep) {
+          const archive = files.length === 1 && isArchiveName(files[0]!.name);
+          const { files: source, skipped } = archive
+            ? await unpack(files[0]!.name, files[0]!.blob).catch(localError)
+            : { files: await Promise.all(files.map(async (f): Promise<SourceFile> => ({ path: f.path, bytes: new Uint8Array(await f.blob.arrayBuffer()) }))), skipped: [] };
+          const results = await scanLocally(source, { skipped });
+          const label = archive ? files[0]!.name : files.length === 1 ? files[0]!.path : (files[0]!.path.split('/')[0] ?? 'upload');
+          return this.sendResults(results, organizationId, settings.enableAi, { label }, m.uploadId);
+        }
         const body = new FormData();
         body.append('organizationId', organizationId);
         body.append('enableAi', String(settings.enableAi));
@@ -350,7 +370,9 @@ export class BackgroundService {
     const urlBody = (url: string): UrlScanBody => ({ target, url, options, ...(consent ? { consent } : {}) });
 
     let res: ScanCreatedResponse;
-    if (req.browserSession) res = await this.browserScan(req, parsed, organizationId, settings.enableAi, idem);
+    // GitHub files, folders, branches and repositories are scanned in the browser unless a Deep scan was asked for.
+    const local = !req.deep && parsed.provider === 'GITHUB' && BROWSER_SCAN_ACTIONS.includes(req.action);
+    if (local || req.browserSession) res = await this.browserScan(req, parsed, organizationId, settings.enableAi, idem, local);
     else switch (req.action) {
       case 'SCAN_FILE':
       case 'SCAN_FOLDER_PATH':
@@ -394,13 +416,13 @@ export class BackgroundService {
    * Private GitHub repository the API cannot read: fetch the file / snapshot with the user's GitHub
    * browser session (background only, in memory) and send it through the normal upload scan.
    */
-  private async browserScan(req: StartScanRequest, parsed: ParsedSource, organizationId: string, enableAi: boolean, idem?: string): Promise<ScanCreatedResponse> {
+  private async browserScan(req: StartScanRequest, parsed: ParsedSource, organizationId: string, enableAi: boolean, idem: string | undefined, local: boolean): Promise<ScanCreatedResponse> {
     const { store, api } = this.deps;
     const repoUrl = repositoryUrl(parsed);
     if (parsed.provider !== 'GITHUB' || !parsed.owner || !parsed.repo || !repoUrl) {
       throw new ServiceError('UNSUPPORTED_SOURCE', 'Browser-session scanning is only available for GitHub repositories.');
     }
-    if (req.action !== 'SCAN_FILE' && req.action !== 'SCAN_BRANCH' && req.action !== 'SCAN_REPOSITORY') {
+    if (!local && req.action !== 'SCAN_FILE' && req.action !== 'SCAN_BRANCH' && req.action !== 'SCAN_REPOSITORY') {
       throw new ServiceError('UNSUPPORTED_SOURCE', 'This scan needs the GitHub integration.');
     }
     // Only the repository open in the user's tab may be read.
@@ -409,7 +431,7 @@ export class BackgroundService {
     if (!tabParsed?.supported || sourceKey(tabParsed) !== sourceKey(parsed)) {
       throw new ServiceError('FORBIDDEN', 'Open this repository in the current tab and try again.');
     }
-    if (req.action === 'SCAN_FILE' && (!req.ref || !req.path)) throw new ServiceError('VALIDATION', 'A branch and file path are required.');
+    if ((req.action === 'SCAN_FILE' || req.action === 'SCAN_FOLDER_PATH') && (!req.ref || !req.path)) throw new ServiceError('VALIDATION', 'A branch and path are required.');
     if (req.action === 'SCAN_BRANCH' && !req.ref) throw new ServiceError('VALIDATION', 'A branch is required.');
 
     const maxBytes = (await store.getMeta())?.limits.maxUploadBytes ?? 200 * 1024 * 1024;
@@ -420,6 +442,16 @@ export class BackgroundService {
       { maxBytes, fetchFn: this.deps.fetchFn, onStep: (step) => this.deps.broadcast({ type: 'BROWSER_SCAN_PROGRESS', step }) },
     );
     validateUploadFiles([{ name: src.name, path: src.relativePath, blob: src.blob }], maxBytes);
+
+    if (local) {
+      this.deps.broadcast({ type: 'BROWSER_SCAN_PROGRESS', step: 'SCANNING' });
+      const { files, skipped } = path
+        ? { files: [{ path, bytes: new Uint8Array(await src.blob.arrayBuffer()) }], skipped: [] }
+        : await unpack(src.name, src.blob, { stripFirstComponent: true }).catch(localError);
+      const scanPath = req.action === 'SCAN_FOLDER_PATH' ? req.path! : path;
+      const results = await scanLocally(files, { pathFilter: scanPath, skipped });
+      return this.sendResults(results, organizationId, enableAi, { sourceUrl: repoUrl, ref, path: scanPath }, idem);
+    }
 
     this.deps.broadcast({ type: 'BROWSER_SCAN_PROGRESS', step: 'UPLOADING' });
     const body = new FormData();
@@ -432,6 +464,20 @@ export class BackgroundService {
     if (path) body.append('path', path);
     body.append('files', src.blob, src.name);
     return api.uploadScan(body, idem);
+  }
+
+  /** Uploads browser-scan results: findings, masked snippets, file list and dependency files, never source code. */
+  private sendResults(results: BrowserScanResults, organizationId: string, enableAi: boolean, source: { sourceUrl?: string; ref?: string | null; path?: string | null; label?: string }, idem?: string): Promise<ScanCreatedResponse> {
+    this.deps.broadcast({ type: 'BROWSER_SCAN_PROGRESS', step: 'UPLOADING' });
+    const body = new FormData();
+    body.append('organizationId', organizationId);
+    body.append('enableAi', String(enableAi));
+    if (source.sourceUrl) body.append('sourceUrl', source.sourceUrl);
+    if (source.ref) body.append('ref', source.ref);
+    if (source.path) body.append('path', source.path);
+    if (source.label) body.append('label', source.label.slice(0, 200));
+    body.append('results', new Blob([JSON.stringify(results)], { type: 'application/json' }), 'results.json');
+    return this.deps.api.browserScan(body, idem);
   }
 
   async setAutoScan(sourceUrl: string, enabled: boolean): Promise<Settings> {
@@ -485,4 +531,9 @@ function safeHost(url: string): string | null {
   } catch {
     return null;
   }
+}
+
+function localError(err: unknown): never {
+  if (err instanceof LocalScanError) throw new ServiceError('VALIDATION', err.message);
+  throw new ServiceError('VALIDATION', `The archive could not be read in the browser (${err instanceof Error ? err.message : 'unknown error'}). Try a Deep scan.`);
 }

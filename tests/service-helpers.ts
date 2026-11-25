@@ -26,6 +26,7 @@ export function fakeApi(inspection: SourceInspection) {
     scanPullRequest: vi.fn(async (_body: unknown, _idem?: string) => created),
     scanUrl: vi.fn(async (_body: unknown, _idem?: string) => created),
     uploadScan: vi.fn(async (_body: FormData, _idem?: string) => created),
+    browserScan: vi.fn(async (_body: FormData, _idem?: string) => created),
     meta: vi.fn(),
     me: vi.fn(),
     login: vi.fn(),
@@ -45,6 +46,7 @@ export async function makeService(opts: { inspection: SourceInspection; settings
   const api = fakeApi(opts.inspection);
   const trackScan = vi.fn(async () => undefined);
   const broadcast = vi.fn();
+  const requestHostPermission = vi.fn(async () => true);
   const service = new BackgroundService({
     store,
     api: api as unknown as CodeGuardApi,
@@ -52,10 +54,11 @@ export async function makeService(opts: { inspection: SourceInspection; settings
     now: () => now,
     openSidePanel: vi.fn(async () => undefined),
     hasHostPermission: vi.fn(async () => true),
+    requestHostPermission,
     getActiveTab: vi.fn(async () => null),
     broadcast,
     trackScan,
     fetchFn: opts.fetchFn,
   });
-  return { service, store, api, trackScan, broadcast, now };
+  return { service, store, api, trackScan, broadcast, now, requestHostPermission };
 }

@@ -11,6 +11,8 @@ const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));
  */
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  // The shared rule engine (src/security-rules, copied from the scanner) imports node:crypto for fingerprints.
+  resolve: { alias: { 'node:crypto': r('./src/shims/node-crypto.ts') } },
   base: './',
   publicDir: 'public',
   build: {

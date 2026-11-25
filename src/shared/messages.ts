@@ -38,9 +38,11 @@ export interface StartScanRequest {
   tabId?: number | null;
   /** Fetch the source with the user's GitHub browser session, then upload it (private GitHub repos). */
   browserSession?: boolean;
+  /** Deep scan: send the source to the server (adds Semgrep, Gitleaks, history). Otherwise GitHub scans run in the browser. */
+  deep?: boolean;
 }
 
-export type BrowserScanStep = 'CHECKING_ACCESS' | 'RETRIEVING' | 'PREPARING' | 'UPLOADING';
+export type BrowserScanStep = 'CHECKING_ACCESS' | 'RETRIEVING' | 'PREPARING' | 'SCANNING' | 'UPLOADING';
 
 /** Messages that only extension pages (popup, side panel) may send. */
 export type UiMessage =
@@ -50,7 +52,7 @@ export type UiMessage =
   | { type: 'UPDATE_SETTINGS'; patch: Partial<Settings> }
   | { type: 'GET_ACTIVE_SOURCE'; tabId?: number | null }
   | { type: 'INSPECT_SOURCE'; url: string }
-  | { type: 'UPLOAD_SCAN'; uploadId: string; organizationId: string; consent: true }
+  | { type: 'UPLOAD_SCAN'; uploadId: string; organizationId: string; consent: true; deep?: boolean }
   | { type: 'START_SCAN'; request: StartScanRequest }
   | { type: 'GET_SCAN'; scanId: string }
   | { type: 'GET_SCAN_STATUS'; scanId: string }
@@ -274,13 +276,14 @@ function validUiMessage(m: Record<string, unknown>): boolean {
     case 'INSPECT_SOURCE':
       return only(m, ['type', 'url']) && isHttpUrl(m.url);
     case 'UPLOAD_SCAN':
-      return only(m, ['type', 'uploadId', 'organizationId', 'consent']) && isId(m.uploadId) && isId(m.organizationId) && m.consent === true;
+      return only(m, ['type', 'uploadId', 'organizationId', 'consent', 'deep']) && isId(m.uploadId) && isId(m.organizationId) && m.consent === true && (m.deep === undefined || isBool(m.deep));
     case 'START_SCAN': {
       if (!only(m, ['type', 'request']) || !isObj(m.request)) return false;
       const r = m.request;
       return (
-        only(r, ['action', 'sourceUrl', 'ref', 'path', 'consent', 'tabId', 'browserSession']) &&
+        only(r, ['action', 'sourceUrl', 'ref', 'path', 'consent', 'tabId', 'browserSession', 'deep']) &&
         (r.browserSession === undefined || isBool(r.browserSession)) &&
+        (r.deep === undefined || isBool(r.deep)) &&
         SCAN_ACTIONS.includes(r.action as ScanActionId) &&
         isHttpUrl(r.sourceUrl) &&
         isOptStr(r.ref, 255) &&

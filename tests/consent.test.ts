@@ -7,7 +7,7 @@ const REPO = 'https://github.com/acme/private-app';
 
 function startScan(service: Awaited<ReturnType<typeof makeService>>['service'], consent?: boolean) {
   return service.handle(
-    { type: 'START_SCAN', request: { action: 'SCAN_REPOSITORY', sourceUrl: REPO, ...(consent !== undefined ? { consent } : {}) } },
+    { type: 'START_SCAN', request: { action: 'SCAN_REPOSITORY', sourceUrl: REPO, deep: true, ...(consent !== undefined ? { consent } : {}) } },
     PAGE_SENDER,
   );
 }
@@ -48,7 +48,7 @@ describe('consent gating in the background', () => {
 
     // Second scan of the same repo (from a file page) needs no new consent.
     const again = await service.handle(
-      { type: 'START_SCAN', request: { action: 'SCAN_BRANCH', sourceUrl: `${REPO}/tree/develop`, ref: 'develop' } },
+      { type: 'START_SCAN', request: { action: 'SCAN_BRANCH', sourceUrl: `${REPO}/tree/develop`, ref: 'develop', deep: true } },
       PAGE_SENDER,
     );
     expect(again.ok).toBe(true);

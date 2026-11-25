@@ -20,6 +20,30 @@ describe('settings URL handling', () => {
 });
 
 describe('UPDATE_SETTINGS', () => {
+  it('requests permission synchronously and persists both URLs after approval without another UI message', async () => {
+    const { service, store, requestHostPermission } = await makeService({ inspection: inspectionFor('https://github.com/a/b') });
+    let approve!: (granted: boolean) => void;
+    requestHostPermission.mockReturnValueOnce(new Promise((resolve) => { approve = resolve; }));
+    const patch = { apiBaseUrl: 'https://api.example.com', dashboardUrl: 'https://app.example.com' };
+    const saving = service.handle({ type: 'UPDATE_SETTINGS', patch }, PAGE_SENDER);
+    expect(requestHostPermission).toHaveBeenCalledWith('https://api.example.com/*');
+    expect((await store.getSettings()).apiBaseUrl).not.toBe(patch.apiBaseUrl);
+    approve(true);
+    expect((await saving).ok).toBe(true);
+    expect(await store.getSettings()).toMatchObject(patch);
+    expect(await store.getToken()).toBeNull();
+  });
+
+  it('keeps URLs and authentication when permission is denied', async () => {
+    const { service, store, requestHostPermission } = await makeService({ inspection: inspectionFor('https://github.com/a/b') });
+    const before = await store.getSettings();
+    requestHostPermission.mockResolvedValueOnce(false);
+    const result = await service.handle({ type: 'UPDATE_SETTINGS', patch: { apiBaseUrl: 'https://api.example.com', dashboardUrl: 'https://app.example.com' } }, PAGE_SENDER);
+    expect(result.ok).toBe(false);
+    expect(await store.getSettings()).toEqual(before);
+    expect(await store.getToken()).toBe(AUTH.accessToken);
+  });
+
   it('signs out when the API URL changes so the token is never sent to another server', async () => {
     const { service, store } = await makeService({ inspection: inspectionFor('https://github.com/a/b') });
     expect(await store.getToken()).toBe(AUTH.accessToken);

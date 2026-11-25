@@ -8,12 +8,17 @@
     "build": "tsc --noEmit && vite build && vite build --config vite.content.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "package": "node scripts/package.mjs"
+    "package": "node scripts/package.mjs",
+    "sync:rules": "node scripts/sync-rules.mjs"
   },
   "dependencies": {
+    "@noble/hashes": "1.8.0",
+    "fflate": "0.8.2",
     "lucide-react": "1.61.0",
     "react": "19.1.10",
     "react-dom": "19.1.10",
+    "smol-toml": "1.9.1",
+    "yaml": "2.9.1",
     "zod": "3.25.76"
   },
   "devDependencies": {
