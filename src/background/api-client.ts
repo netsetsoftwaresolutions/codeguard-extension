@@ -217,6 +217,10 @@ export class CodeGuardApi {
   uploadScan(body: FormData, idempotencyKey?: string) {
     return this.client.request<ScanCreatedResponse>('POST', '/scans/upload', { body, headers: idem(idempotencyKey), timeoutMs: 120_000 });
   }
+  /** Results of a scan that ran in the browser (no source code). */
+  browserScan(body: FormData, idempotencyKey?: string) {
+    return this.client.request<ScanCreatedResponse>('POST', '/scans/browser', { body, headers: idem(idempotencyKey), timeoutMs: 120_000 });
+  }
   listScans(organizationId: string, pageSize = 5) {
     return this.client.request<Paginated<ScanView>>('GET', `/scans?organizationId=${enc(organizationId)}&page=1&pageSize=${pageSize}`);
   }

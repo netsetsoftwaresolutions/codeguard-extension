@@ -25,6 +25,7 @@ export function FindingItem({ finding, dashboardUrl }: { finding: FindingView; d
           <div className="flex flex-wrap items-center gap-1.5">
             <SeverityBadge severity={finding.severity} />
             <ClassificationBadge classification={finding.classification} />
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">{finding.confidence.toLowerCase()} confidence</span>
             {finding.introducedInChange && <span className="rounded-md bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 dark:text-brand-100">New in change</span>}
           </div>
           <div className="text-sm font-medium leading-snug">{finding.title}</div>

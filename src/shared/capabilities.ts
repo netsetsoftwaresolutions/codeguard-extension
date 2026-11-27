@@ -131,3 +131,6 @@ export function getScanActions(
   }
   return actions;
 }
+
+/** GitHub scans that run in the browser by default (source never leaves it); a Deep scan sends them to the server. */
+export const BROWSER_SCAN_ACTIONS: readonly ScanActionId[] = ['SCAN_FILE', 'SCAN_FOLDER_PATH', 'SCAN_BRANCH', 'SCAN_REPOSITORY'];

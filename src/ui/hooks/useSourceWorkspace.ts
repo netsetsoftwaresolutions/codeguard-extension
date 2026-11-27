@@ -20,6 +20,7 @@ export function useSourceWorkspace(state: ExtensionState, opts: { follow: boolea
   const [scanError, setScanError] = useState<string | null>(null);
   const [consentFor, setConsentFor] = useState<ScanAction | null>(null);
   const [browserStep, setBrowserStep] = useState<BrowserScanStep | null>(null);
+  const [deep, setDeep] = useState(false);
 
   useEffect(() => {
     const onMessage = (msg: unknown, sender: chrome.runtime.MessageSender) => {
@@ -71,7 +72,7 @@ export function useSourceWorkspace(state: ExtensionState, opts: { follow: boolea
       try {
         const res = await send({
           type: 'START_SCAN',
-          request: { action: action.id, sourceUrl: source.url, ref: action.ref ?? null, path: action.path ?? null, consent, tabId: source.tabId, ...(action.browserSession ? { browserSession: true } : {}) },
+          request: { action: action.id, sourceUrl: source.url, ref: action.ref ?? null, path: action.path ?? null, consent, tabId: source.tabId, ...(action.browserSession ? { browserSession: true } : {}), ...(deep ? { deep: true } : {}) },
         });
         setCreated(res);
         setSelectedScanId(res.scans[0]?.id ?? null);
@@ -88,7 +89,7 @@ export function useSourceWorkspace(state: ExtensionState, opts: { follow: boolea
         setBrowserStep(null);
       }
     },
-    [source],
+    [source, deep],
   );
 
   /**
@@ -122,6 +123,8 @@ export function useSourceWorkspace(state: ExtensionState, opts: { follow: boolea
     startScan,
     starting,
     browserStep,
+    deep,
+    setDeep,
     scanError,
     consentFor,
     acceptConsent,

@@ -15,7 +15,8 @@
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "types": ["chrome", "vite/client"]
+    "types": ["chrome", "vite/client"],
+    "paths": { "node:crypto": ["./src/shims/node-crypto.ts"] }
   },
   "include": ["src", "tests"]
 }

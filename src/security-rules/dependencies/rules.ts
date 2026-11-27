@@ -1,0 +1,47 @@
+import type { RuleMeta } from '../types';
+
+/** Rule metadata for findings produced from vulnerability databases (OSV). */
+export const dependencyRuleMeta: RuleMeta[] = [
+  {
+    id: 'CG-DEP-001',
+    name: 'Known vulnerable dependency',
+    description: 'A resolved dependency version is affected by a published vulnerability advisory (OSV.dev, aggregating GitHub Security Advisories, PyPA, npm, Packagist and others).',
+    category: 'VULNERABLE_DEPENDENCY',
+    severity: 'MEDIUM',
+    confidence: 'HIGH',
+    classification: 'CONFIRMED',
+    languages: ['json', 'yaml', 'toml', 'text'],
+    matching: 'Exact package name + version from a lockfile queried against the OSV API. Severity comes from the advisory (GitHub severity or CVSS v3 base score); when the advisory publishes no severity, MEDIUM is used and stated.',
+    falsePositiveGuidance: 'The vulnerable code path may be unreachable in your usage, or the package may be a development-only dependency. The advisory still applies to the installed version.',
+    remediation: 'Upgrade to a fixed version listed in the advisory. If none is published, assess exposure, apply vendor mitigations, or replace the package.',
+    references: ['https://osv.dev'],
+  },
+  {
+    id: 'CG-DEP-002',
+    name: 'Known malicious package version',
+    description: 'The dependency matches an OSV malicious-package advisory (MAL-*), i.e. the published package version was identified as intentionally malicious.',
+    category: 'MALICIOUS_PACKAGE',
+    severity: 'CRITICAL',
+    confidence: 'HIGH',
+    classification: 'CONFIRMED',
+    languages: ['json', 'yaml', 'toml', 'text'],
+    matching: 'Exact package name + version matched against OSV advisories whose ID starts with "MAL-" (OpenSSF malicious-packages dataset).',
+    falsePositiveGuidance: 'Advisories are occasionally withdrawn; check the advisory status. Treat any machine that installed this version as potentially compromised until verified.',
+    remediation: 'Remove the package immediately, rotate credentials available on machines/CI where it was installed, and review for persistence.',
+    references: ['https://github.com/ossf/malicious-packages', 'https://osv.dev'],
+  },
+  {
+    id: 'CG-DEP-003',
+    name: 'Dependency versions could not be resolved',
+    description: 'A dependency manifest was found without a supported lockfile, so the exact installed versions are unknown and could not be checked against advisories.',
+    category: 'SUPPLY_CHAIN',
+    severity: 'INFO',
+    confidence: 'HIGH',
+    classification: 'CONFIRMED',
+    languages: ['json', 'toml', 'text'],
+    matching: 'Manifest present (package.json, pyproject.toml, composer.json, Pipfile) with no corresponding lockfile in the same directory.',
+    falsePositiveGuidance: 'Libraries often intentionally omit lockfiles.',
+    remediation: 'Commit a lockfile so builds are reproducible and dependency scanning can be exact.',
+    references: ['https://docs.npmjs.com/cli/configuring-npm/package-lock-json'],
+  },
+];

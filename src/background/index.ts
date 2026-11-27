@@ -34,6 +34,7 @@ const service = new BackgroundService({
   runtimeId: chrome.runtime.id,
   openSidePanel: (tabId) => chrome.sidePanel.open({ tabId }),
   hasHostPermission: (pattern) => chrome.permissions.contains({ origins: [pattern] }),
+  requestHostPermission: (pattern) => chrome.permissions.request({ origins: [pattern] }),
   getActiveTab: async () => {
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
     return tab ? { id: tab.id, url: tab.url } : null;

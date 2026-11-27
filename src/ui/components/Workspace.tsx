@@ -1,6 +1,7 @@
 import { Spinner } from '../../components/primitives';
 import { Check, Circle, ExternalLink, PanelRight, Plug, Upload } from 'lucide-react';
 import { useState } from 'react';
+import { BROWSER_SCAN_ACTIONS } from '../../shared/capabilities';
 import type { BrowserScanStep, ExtensionState } from '../../shared/messages';
 import { dashboardLink, errorMessage, openTab, send } from '../messaging';
 import { useRecentScans } from '../hooks/useRecentScans';
@@ -13,20 +14,20 @@ import { ScanList } from './ScanList';
 import { ScanStatusPanel } from './ScanStatusPanel';
 import { SourceCard } from './SourceCard';
 
-const BROWSER_STEPS: BrowserScanStep[] = ['CHECKING_ACCESS', 'RETRIEVING', 'PREPARING', 'UPLOADING'];
-
-/** Progress of a scan whose source is read with the user's GitHub browser session. */
-function BrowserSteps({ step, productName }: { step: BrowserScanStep | null; productName: string }) {
+/** Progress of a scan whose source is read in this browser: scanned here (local) or uploaded (deep). */
+function BrowserSteps({ step, productName, local }: { step: BrowserScanStep | null; productName: string; local: boolean }) {
+  const steps: BrowserScanStep[] = local ? ['CHECKING_ACCESS', 'RETRIEVING', 'PREPARING', 'SCANNING', 'UPLOADING'] : ['CHECKING_ACCESS', 'RETRIEVING', 'PREPARING', 'UPLOADING'];
   const labels: Record<BrowserScanStep, string> = {
     CHECKING_ACCESS: 'Checking browser access',
     RETRIEVING: 'Retrieving source code',
     PREPARING: 'Preparing source',
-    UPLOADING: `Uploading to ${productName}`,
+    SCANNING: 'Scanning in your browser',
+    UPLOADING: local ? `Sending results to ${productName}` : `Uploading to ${productName}`,
   };
-  const current = step ? BROWSER_STEPS.indexOf(step) : 0;
+  const current = step ? steps.indexOf(step) : 0;
   return (
     <ol className="mt-2 space-y-1 text-xs" aria-live="polite" aria-label="Scan preparation progress">
-      {BROWSER_STEPS.map((s, i) => (
+      {steps.map((s, i) => (
         <li key={s} className={i <= current ? 'flex items-center gap-2' : 'flex items-center gap-2 text-slate-500 dark:text-slate-400'} aria-current={i === current ? 'step' : undefined}>
           {i < current ? <Check size={12} className="text-emerald-500" aria-hidden="true" /> : i === current ? <Spinner size={12} /> : <Circle size={12} aria-hidden="true" />}
           {labels[s]}
@@ -66,7 +67,9 @@ export function Workspace({ state, variant, onStateChange }: { state: ExtensionS
   const recentOthers = (recent.scans ?? []).filter((s) => !listedIds.has(s.id));
   const showActions = !!ws.source?.parsed?.supported;
   const browserMode = ws.actions.some((a) => a.browserSession);
-  const browserRunning = !!ws.starting && !!ws.actions.find((a) => a.id === ws.starting)?.browserSession;
+  const isGitHub = ws.source?.parsed?.provider === 'GITHUB';
+  const localRunning = !!ws.starting && isGitHub && !ws.deep && BROWSER_SCAN_ACTIONS.includes(ws.starting);
+  const browserRunning = localRunning || (!!ws.starting && !!ws.actions.find((a) => a.id === ws.starting)?.browserSession);
 
   return (
     <main className="space-y-3 p-3">
@@ -80,7 +83,20 @@ export function Workspace({ state, variant, onStateChange }: { state: ExtensionS
           ) : (
             <p className="text-xs text-slate-500 dark:text-slate-400">No scan options are available for this page.</p>
           )}
-          {browserRunning && <BrowserSteps step={ws.browserStep} productName={state.productName} />}
+          {isGitHub && (
+            <label className="mt-2 flex items-start gap-2 text-xs">
+              <input type="checkbox" className="mt-0.5" checked={ws.deep} onChange={(e) => ws.setDeep(e.target.checked)} disabled={!!ws.starting} />
+              <span>
+                <span className="font-medium">Deep scan</span>
+                <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                  {ws.deep
+                    ? `Sends the code to ${state.productName} to also run Semgrep, Gitleaks and history checks.`
+                    : 'Off: the code is scanned in this browser and only the results are sent.'}
+                </span>
+              </span>
+            </label>
+          )}
+          {browserRunning && <BrowserSteps step={ws.browserStep} productName={state.productName} local={localRunning} />}
           {browserMode && !browserRunning && (
             <>
               <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">

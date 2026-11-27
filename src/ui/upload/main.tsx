@@ -14,6 +14,7 @@ function Upload({ state }: { state: ExtensionState }) {
   const [mode, setMode] = useState('files');
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [consent, setConsent] = useState(false);
+  const [deep, setDeep] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<ScanCreatedResponse | null>(null);
@@ -34,7 +35,7 @@ function Upload({ state }: { state: ExtensionState }) {
       if (mode === 'archive' && (files.length !== 1 || !/\.(zip|tar|tar\.gz|tgz)$/i.test(files[0]!.name))) throw new Error('Select one ZIP, TAR, TAR.GZ or TGZ archive.');
       setBusy(true);
       uploadId = await stageUpload(files);
-      const result = await send({ type: 'UPLOAD_SCAN', uploadId, organizationId: state.settings.organizationId, consent: true });
+      const result = await send({ type: 'UPLOAD_SCAN', uploadId, organizationId: state.settings.organizationId, consent: true, ...(deep ? { deep: true } : {}) });
       setCreated(result);
       setFiles([]);
       setConsent(false);
@@ -62,10 +63,13 @@ function Upload({ state }: { state: ExtensionState }) {
         </label>
         <p className="text-xs">{files.length} files selected · {(files.reduce((n, f) => n + f.blob.size, 0) / 1048576).toFixed(2)} MB. Folder paths are preserved. Plan upload limits apply.</p>
         <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={consent} disabled={busy} onChange={(e) => setConsent(e.target.checked)} />
-          <span>I have permission to send these files to {state.settings.apiBaseUrl} for security analysis.</span>
+          <span>{deep ? `I have permission to send these files to ${state.settings.apiBaseUrl} for security analysis.` : `I have permission to scan these files and send the results to ${state.settings.apiBaseUrl}.`}</span>
+        </label>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={deep} disabled={busy} onChange={(e) => { setDeep(e.target.checked); setConsent(false); }} />
+          <span>Deep scan<span className="block text-xs text-slate-500 dark:text-slate-400">{deep ? 'The files are uploaded so Semgrep and Gitleaks also run.' : 'Off: files are scanned in this browser; only results and dependency lists are sent.'}</span></span>
         </label>
         {state.settings.enableAi && <p className="text-xs">AI explanations are enabled in extension settings.</p>}
-        <button type="button" className="cg-btn-primary" disabled={busy || !files.length || !consent || !state.apiReachable} onClick={() => void submit()}>{busy ? 'Uploading… Keep this tab open' : 'Upload and scan'}</button>
+        <button type="button" className="cg-btn-primary" disabled={busy || !files.length || !consent || !state.apiReachable} onClick={() => void submit()}>{busy ? (deep ? 'Uploading… Keep this tab open' : 'Scanning… Keep this tab open') : deep ? 'Upload and scan' : 'Scan'}</button>
         {error && <Notice tone="error">{error}</Notice>}
       </div>
     </Section>
