@@ -11,7 +11,7 @@ import { scanSecrets } from './secrets';
  * This file is copied into the extension (src/scan-engine), so keep it free of Node-only APIs.
  */
 
-export const RULESET_VERSION = 'ruleset 2026.11.1';
+export const RULESET_VERSION = 'ruleset 2026.11.2';
 
 export interface RuleEntry {
   /** POSIX path relative to the scan root; directories end with "/". */

@@ -63,13 +63,65 @@ export function looksMinified(content: string, lines: string[]): boolean {
   return avg > 300 || longLines > 0 && longLines / lines.length > 0.2;
 }
 
+/** Files that mix markup with code: Vue, Svelte, HTML, Blade views and PHP files that drop out of PHP into markup. */
+export function isTemplateFile(path: string, language: Language, content: string): boolean {
+  if (language === 'html' || language === 'vue' || /\.(blade\.php|phtml)$/i.test(path)) return true;
+  return language === 'php' && /\?>\s*</.test(content);
+}
+
+// Executable regions of a template; group 0 keeps the whole match. Script types that hold data are not code.
+const TEMPLATE_CODE: { re: RegExp; group: number }[] = [
+  { re: /<script\b(?![^>]*\btype\s*=\s*["']?(?:application\/(?:ld\+)?json|text\/(?:template|x-template|html)|importmap))[^>]*>([\s\S]*?)<\/script\s*>/gi, group: 1 },
+  { re: /<\?(?:php\b|=)([\s\S]*?)(?:\?>|$(?![\s\S]))/gi, group: 1 },
+  { re: /@php\b([\s\S]*?)@endphp\b/g, group: 1 },
+  { re: /\{!![\s\S]*?!!\}|\{\{[\s\S]*?\}\}/g, group: 0 },
+  { re: /\s(?:on[a-z]+|@[\w.:-]+|v-on:[\w.:-]+)\s*=\s*(?:"[^"]*"|'[^']*')/gi, group: 0 },
+  { re: /\bhref\s*=\s*["']\s*(javascript:[^"']*)/gi, group: 1 },
+];
+
+/**
+ * Blank everything in a template that cannot execute (markup, text, <style> blocks), keeping
+ * <script> bodies, PHP blocks, Blade @php and {{ }} / {!! !!} echoes, Vue interpolations, inline
+ * event handlers and javascript: URLs. Newlines survive, so line and column numbers are unchanged.
+ */
+export function executableView(content: string): string {
+  const keep = new Uint8Array(content.length);
+  for (const { re, group } of TEMPLATE_CODE) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(content))) {
+      if (m[0].length === 0) {
+        re.lastIndex++;
+        continue;
+      }
+      const body = m[group];
+      if (!body) continue;
+      const start = group === 0 ? m.index : m.index + m[0].lastIndexOf(body);
+      keep.fill(1, start, start + body.length);
+    }
+  }
+  const out: string[] = [];
+  let i = 0;
+  while (i < content.length) {
+    let j = i;
+    while (j < content.length && keep[j] === keep[i]) j++;
+    out.push(keep[i] ? content.slice(i, j) : content.slice(i, j).replace(/[^\r\n]/g, ' '));
+    i = j;
+  }
+  return out.join('');
+}
+
 export function buildFileContext(path: string, content: string): FileContext {
   const lines = content.split(/\r?\n/);
+  const language = detectLanguage(path);
+  const code = isTemplateFile(path, language, content) ? executableView(content) : content;
   return {
     path,
     content,
     lines,
-    language: detectLanguage(path),
+    code,
+    codeLines: code === content ? lines : code.split(/\r?\n/),
+    language,
     isTestOrExample: isTestOrExamplePath(path),
     isDocumentation: isDocumentationPath(path),
     isMinified: looksMinified(content, lines),

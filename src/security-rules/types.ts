@@ -62,6 +62,13 @@ export interface FileContext {
   content: string;
   lines: string[];
   language: Language;
+  /**
+   * Only the executable parts of the file. For templates (Vue, Svelte, HTML, Blade, PHP views) markup,
+   * <style> blocks and text are blanked to spaces; newlines are kept, so indices and line numbers match `content`.
+   * For every other file this is `content` itself.
+   */
+  code: string;
+  codeLines: string[];
   isTestOrExample: boolean;
   isDocumentation: boolean;
   isMinified: boolean;

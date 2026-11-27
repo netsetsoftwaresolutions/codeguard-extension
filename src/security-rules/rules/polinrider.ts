@@ -1,5 +1,13 @@
 import type { CodeRule, RuleHit, RuleMeta } from '../types';
 import { applyContext } from './helpers';
+import { DECODE_EXEC_LINES, WEB_SHELL_LINES } from './malware';
+import { assessSignals, collectSignals, lineOf, lineStarts } from './obfuscation-signals';
+
+const CONFIDENCE_TEXT = {
+  HIGH: 'High confidence: several independent signs that hidden code is executed.',
+  MEDIUM: 'Medium confidence: code is executed together with one sign that it is hidden. Review it manually.',
+  LOW: 'Low confidence: encoded or obfuscated data without visible execution. It may be a legitimate asset.',
+} as const;
 
 /**
  * PolinRider (DPRK) campaign detection, ported from the team's scan-malware-latest.mjs.
@@ -33,7 +41,8 @@ export const POLINRIDER_SIGNATURES: RegExp[] = [
   /git\s+commit\s+--amend[^\n]*--no-verify|git\s+push\s+-u?f\b[^\n]*--no-verify/,
   /BlockchainFont-Regular|TechMono-Regular/,
   /eval\s*\(\s*(atob|Buffer\.from|decodeURIComponent|unescape)\s*\(/,
-  /atob\s*\(\s*process\.env\./,
+  // PolinRider decodes its own AUTH_API* variables; decoding other env vars (e.g. a Base64 config) is ordinary.
+  /atob\s*\(\s*process\.env\.AUTH_(API|ACCESS)/,
   /eval\s*\(\s*(await\s+)?\w*(res|response|body|data|text|proxyInfo|payload|src)\w*(\.text\(\))?\s*\)/i,
   // 2026 "init" / Ethereum waves (Abnormal, Corgea, OX Security): build markers, tags, XOR keys, wallets, C2.
   /\/\*(M260630A|RS260605|NPM_WS_SHIM|C25061[7-9]A|C250620A|C260511A)\*\//,
@@ -84,22 +93,22 @@ const DISGUISED_NODE_FILE = /\bnode\s+(?:-\S+\s+)*[^\s"'|&;-][^\s"'|&;]*\.(?![cm
 const DEP_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
 
 /**
- * Loader techniques from the script's PATTERNS list. Not repeated here because other rules cover them:
- * _0x identifiers (CG-OBF-002), String.fromCharCode chains and webhook exfil (malware.ts), and
- * child_process + download (CG-RCE-001, which needs the download to actually be executed).
+ * Loader techniques from the script's PATTERNS list that have almost no legitimate use, so one is
+ * enough for a finding. The script's weaker patterns (eval/Function string concat, new Function(variable),
+ * vm.runIn*Context, huge blobs, long dense lines) are signals in obfuscation-signals.ts and only count
+ * together with other evidence. Not repeated here because other rules cover them: _0x identifiers
+ * (CG-OBF-002), decode-into-eval on one line (CG-OBF-001), web shells (CG-BKD-002), webhook exfil
+ * and child_process + download (malware.ts).
  */
-const LOADER_PATTERNS: { name: string; re: RegExp }[] = [
-  { name: 'eval/Function with string concat', re: /(Function|eval)\s*\(\s*['"`][^'"`\n]*['"`]\s*\+/ },
-  { name: 'new Function(...) executing a variable', re: /new\s+Function\s*\(\s*[\w.]+\s*\)/ },
-  { name: 'vm.runIn*Context', re: /vm\.run(InThisContext|InNewContext|InContext)\s*\(/ },
+const LOADER_TECHNIQUES: { name: string; re: RegExp }[] = [
   { name: 'hidden detached child process (detached + windowsHide)', re: /detached\s*:\s*true[\s\S]{0,300}windowsHide\s*:\s*true|windowsHide\s*:\s*true[\s\S]{0,300}detached\s*:\s*true/ },
   { name: 'spawns `node -e` with inline code', re: /(['"`]node['"`]|process\.execPath)\s*,\s*\[\s*['"`]-e['"`]/ },
   { name: 'eval near require of http(s)', re: /eval[\s\S]{0,200}require\s*\(\s*['"]https?['"]\s*\)/ },
   { name: 'obfuscator string-array rotation (while(!![]))', re: /while\s*\(\s*!!\s*\[\s*\]\s*\)/ },
-  { name: 'huge hex/base64 string blob', re: /['"`](?:[0-9a-f]{2000,}|[A-Za-z0-9+/]{4000,}={0,2})['"`]/i },
 ];
-const SKIP_LOADER_PATH = /\.min\.(js|css)$|(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$|\.(lock|map|csv|sql)$/i;
-const SKIP_LONG_LINE_PATH = /(^|\/)src\/database\/migrations\/|\.svg$/i;
+const SKIP_LOADER_PATH = /\.min\.(js|css)$|(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$|\.(lock|map|csv|sql|svg|json)$/i;
+/** One-line decode→execute and web shells already have their own finding at that line. */
+const coveredElsewhere = (line: string) => DECODE_EXEC_LINES.some((re) => re.test(line)) || WEB_SHELL_LINES.some((re) => re.test(line));
 
 /** Base64 or base64url to UTF-8 text with web APIs (this file also runs in the browser extension). */
 function decodeBase64(value: string): string {
@@ -161,7 +170,7 @@ export const polinriderRules: CodeRule[] = [
       'Known malware: PolinRider (DPRK) backdoor',
       'This file contains a known signature of PolinRider, a North Korea–linked campaign that hides a loader in repositories, steals secrets from process.env, and uses stolen tokens to push itself into more repositories. These are exact indicators from analysed samples, not a heuristic. Docs and scanner scripts that quote the indicators are shown as possible false positives, except README files inside a fonts folder: the campaign ships its own decoy README there.',
     ),
-    matching: 'Literal PolinRider indicators: decoder names (_$_1e42, MDy, jFD, dgC), global["!"|"_V"|"r"|"m"] markers, the (global, require) loader IIFE, eval of decoded or fetched data, atob(process.env.*), string-table fragments, XOR keys, TRON/Aptos dead-drop wallets and lookups, vercel.app C2 hosts, the temp_auto_push/config.bat dropper, amend/push with --no-verify, and the decoy font README names.',
+    matching: 'Literal PolinRider indicators: decoder names (_$_1e42, MDy, jFD, dgC), global["!"|"_V"|"r"|"m"] markers, the (global, require) loader IIFE, eval of decoded or fetched data, atob(process.env.AUTH_API*/AUTH_ACCESS*), string-table fragments, XOR keys, TRON/Aptos dead-drop wallets and lookups, vercel.app C2 hosts, the temp_auto_push/config.bat dropper, amend/push with --no-verify, and the decoy font README names.',
     appliesToPath: (path) => !isTeamScanner(path),
     analyze(ctx) {
       const hits = polinriderSignatureHits(ctx.content);
@@ -287,28 +296,42 @@ export const polinriderRules: CodeRule[] = [
   {
     ...meta(
       'CG-MAL-005',
-      'Malware loader technique (PolinRider-style)',
-      'The file uses a technique PolinRider loaders rely on to hide or launch code: code pushed off-screen after wide whitespace, obfuscator string-array rotation, hidden detached processes, inline node -e, runtime evaluation of variables, or very long dense code lines.',
-      { category: 'OBFUSCATION', confidence: 'MEDIUM', classification: 'SUSPICIOUS' },
+      'Obfuscated code execution (malware loader technique)',
+      'The file hides code and then runs it, the way malware loaders such as PolinRider do: it decodes or unpacks data and executes it, calls a dangerous function whose name is disguised, rotates an obfuscator string array, starts hidden detached processes or inline node -e code, or pushes code off-screen after wide whitespace.',
+      { category: 'OBFUSCATION', severity: 'HIGH', confidence: 'MEDIUM', classification: 'SUSPICIOUS' },
     ),
-    matching: 'Script PATTERNS: eval/Function string concat, new Function(variable), vm.runIn*Context, detached + windowsHide, node -e spawn, eval near require("http"), while(!![]), huge hex/base64 blobs, a non-space run of 20+ whitespace characters ending past column 100, and lines of 600+ characters where ( ) { } ; make up over 3%.',
-    falsePositiveGuidance: 'Bundlers and some tools produce long lines or runtime evaluation. Hidden off-screen code and string-array rotation have almost no legitimate use in source files.',
-    remediation: 'Open the file in an editor with word-wrap on and review the flagged line. If it hides or launches code you did not write, treat the repository as compromised. ' + COMPROMISED,
+    matching: 'Two parts. (1) Techniques with almost no legitimate use, reported alone at MEDIUM confidence: detached + windowsHide, node -e spawn, eval near require("http"), while(!![]) string-array rotation, and a non-space run of 20+ whitespace characters ending past column 100. (2) Independent indicators read from executable code only (template markup and CSS are ignored), combined within ~1500 characters: an execution sink (eval, new Function, Function(...)(), vm.runIn*Context, string setTimeout, PHP eval/assert/create_function/preg_replace /e); decoding calls; nested decoders; Base64/hex string literals of 200+ characters with high Shannon entropy; 16+ hex/octal escapes on a line; obfuscator-style identifiers; dangerous function names hidden by string splitting, escapes, ROT13, reversal, chr() or Base64. HIGH confidence: nested decoders, or decoding that feeds the sink together with another indicator or with the decoded variable passed to it, or a hidden dangerous name that is called. MEDIUM: a sink with one other indicator. LOW: two payload-style indicators with no sink. A long line or a high-entropy string alone never reports. Minified and generated files report only HIGH. Lines already reported by CG-OBF-001 or CG-BKD-002 are skipped.',
+    falsePositiveGuidance: 'Template compilers, plugin loaders and some bundles evaluate generated code, and Base64 assets are high-entropy. A finding needs a sink plus hidden input, so read the listed indicators: decoding your own build output is benign, executing data you cannot read is not.',
+    remediation: 'Open the file in an editor with word-wrap on and review the flagged line. Decode any payload offline without running it. If it hides or launches code you did not write, treat the repository as compromised. ' + COMPROMISED,
     appliesToPath: (path) => !isTeamScanner(path) && !SKIP_LOADER_PATH.test(path),
     analyze(ctx) {
-      // Build output (dist/, build/, .next/, out/, coverage/) is skipped, as in the team script; CG-MAL-001 still checks it.
-      if (ctx.isGenerated) return [];
       const hits: RuleHit[] = [];
-      const push = (name: string, line: number, column: number) => {
+      const push = (name: string, line: number, column: number, extra: Partial<RuleHit> = {}) => {
         const text = ctx.lines[line - 1] ?? '';
-        const base: RuleHit = { ruleId: 'CG-MAL-005', line, evidence: windowAround(text, column), fingerprintKey: name, extraDescription: `Technique: ${name}.` };
+        const base: RuleHit = { ruleId: 'CG-MAL-005', line, evidence: windowAround(text, column), fingerprintKey: name, extraDescription: `Technique: ${name}.`, ...extra };
         hits.push(applyContext(base, polinriderRules[4]!, ctx, text));
       };
-      for (const { name, re } of LOADER_PATTERNS) {
-        const m = re.exec(ctx.content);
+
+      const signals = collectSignals(ctx);
+      const starts = lineStarts(ctx.code);
+      for (const c of assessSignals(signals, ctx, (index) => coveredElsewhere(ctx.codeLines[lineOf(starts, index) - 1] ?? ''))) {
+        const line = lineOf(starts, c.index);
+        const column = c.index - starts[line - 1]!;
+        push(`scored:${c.indicators[0]}`, line, column, {
+          confidence: c.confidence,
+          severity: c.confidence === 'LOW' ? 'MEDIUM' : 'HIGH',
+          extraDescription: `${CONFIDENCE_TEXT[c.confidence]} Indicators: ${c.indicators.join('; ')}.`,
+          metadata: { indicators: c.indicators },
+        });
+      }
+
+      // Build output (dist/, build/, .next/, out/, coverage/) keeps only the high-confidence check above, as in the team script.
+      if (ctx.isGenerated) return hits;
+      for (const { name, re } of LOADER_TECHNIQUES) {
+        const m = re.exec(ctx.code);
         if (!m) continue;
-        const line = lineAt(ctx.content, m.index);
-        push(name, line, Math.max(0, (ctx.lines[line - 1] ?? '').indexOf(m[0].split('\n')[0]!)));
+        const line = lineAt(ctx.code, m.index);
+        push(name, line, Math.max(0, (ctx.lines[line - 1] ?? '').indexOf(m[0].split('\n')[0]!)), { metadata: { indicators: [name] } });
       }
       const padded = ctx.lines.findIndex((l) => /^.*\S[ 	  -​　﻿]{20,}(?<=^.{100,})\S/.test(l));
       if (padded >= 0) {
@@ -318,11 +341,6 @@ export const polinriderRules: CodeRule[] = [
           const last = hits[hits.length - 1]!;
           hits[hits.length - 1] = { ...last, severity: 'CRITICAL', confidence: 'HIGH', classification: 'CONFIRMED', title: 'Known malware: PolinRider "init" loader file', extraDescription: 'This is the extensionless "init" file the 2026 PolinRider wave adds and runs from npm scripts: a harmless-looking stub followed by obfuscated code pushed off-screen.' };
         }
-      }
-      if (!SKIP_LONG_LINE_PATH.test(ctx.path) && !ctx.isMinified) {
-        // Counts only ( ) { } ; — long Tailwind class strings are full of [ ] = but are not code.
-        const dense = ctx.lines.findIndex((l) => l.length >= 600 && (l.match(/[(){};]/g) ?? []).length / l.length > 0.03);
-        if (dense >= 0) push('long line with high code-shape density', dense + 1, 0);
       }
       return hits;
     },

@@ -21,6 +21,8 @@ export interface PatternRuleSpec extends RuleMeta {
   skipMinified?: boolean;
   /** Skip generated/vendor paths entirely. */
   skipGenerated?: boolean;
+  /** Match only executable content: in templates, markup, text and <style> blocks are ignored (see FileContext.code). */
+  codeOnly?: boolean;
   appliesToPath?: (path: string) => boolean;
   maxHitsPerFile?: number;
 }
@@ -61,6 +63,7 @@ export function patternRule(spec: PatternRuleSpec): CodeRule {
     escalate,
     skipMinified,
     skipGenerated,
+    codeOnly,
     maxHitsPerFile = 5,
     ...meta
   } = spec;
@@ -71,16 +74,18 @@ export function patternRule(spec: PatternRuleSpec): CodeRule {
       if (!languageMatches(meta.languages, ctx.language)) return [];
       if (skipMinified && ctx.isMinified) return [];
       if (skipGenerated && ctx.isGenerated) return [];
-      if (requireAllInFile && !requireAllInFile.every((re) => re.test(ctx.content))) return [];
-      if (requireAnyInFile && !requireAnyInFile.some((re) => re.test(ctx.content))) return [];
+      const content = codeOnly ? ctx.code : ctx.content;
+      const lines = codeOnly ? ctx.codeLines : ctx.lines;
+      if (requireAllInFile && !requireAllInFile.every((re) => re.test(content))) return [];
+      if (requireAnyInFile && !requireAnyInFile.some((re) => re.test(content))) return [];
       if (requireCount) {
         const g = new RegExp(requireCount.pattern.source, requireCount.pattern.flags.includes('g') ? requireCount.pattern.flags : requireCount.pattern.flags + 'g');
         let n = 0;
-        while (g.exec(ctx.content) && ++n < requireCount.min);
+        while (g.exec(content) && ++n < requireCount.min);
         if (n < requireCount.min) return [];
       }
 
-      const escalated = escalate ? escalate.anyInFile.some((re) => re.test(ctx.content)) : false;
+      const escalated = escalate ? escalate.anyInFile.some((re) => re.test(content)) : false;
       const hits: RuleHit[] = [];
       const seenLines = new Set<number>();
 
@@ -101,15 +106,17 @@ export function patternRule(spec: PatternRuleSpec): CodeRule {
       };
 
       if (linePatterns.length) {
-        for (let i = 0; i < ctx.lines.length && hits.length < maxHitsPerFile; i++) {
-          const text = ctx.lines[i]!;
-          if (text.length === 0) continue;
-          const probe = text.length > 20000 ? text.slice(0, 20000) : text;
+        for (let i = 0; i < lines.length && hits.length < maxHitsPerFile; i++) {
+          const code = lines[i]!;
+          if (code.trim().length === 0) continue;
+          const probe = code.length > 20000 ? code.slice(0, 20000) : code;
+          // The code view keeps columns, so evidence and comment checks use the original line.
+          const text = ctx.lines[i] ?? code;
           for (const re of linePatterns) {
             const m = re.exec(probe);
             if (m) {
               // For very long (minified) lines, show a window around the match instead of the whole line.
-              const evidence = probe.length > 300 ? probe.slice(Math.max(0, m.index - 80), m.index + 160) : probe;
+              const evidence = text.length > 300 ? text.slice(Math.max(0, m.index - 80), m.index + 160) : text;
               push(i + 1, text, evidence);
               break;
             }
@@ -120,9 +127,9 @@ export function patternRule(spec: PatternRuleSpec): CodeRule {
         const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
         let m: RegExpExecArray | null;
         let guard = 0;
-        while ((m = g.exec(ctx.content)) && hits.length < maxHitsPerFile && guard++ < 1000) {
-          const line = indexToLine(ctx.content, m.index);
-          push(line, ctx.lines[line - 1] ?? '', m[0].slice(0, 300));
+        while ((m = g.exec(content)) && hits.length < maxHitsPerFile && guard++ < 1000) {
+          const line = indexToLine(content, m.index);
+          push(line, ctx.lines[line - 1] ?? '', ctx.content.slice(m.index, m.index + Math.min(m[0].length, 300)));
           if (m[0].length === 0) g.lastIndex++;
         }
       }
